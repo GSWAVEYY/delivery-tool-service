@@ -1,21 +1,22 @@
 import React from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useAuthStore } from "../store/auth";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuthStore();
 
   const handleLogout = () => {
-    Alert.alert("Logout", "Are you sure?", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: logout },
-    ]);
+    // Alert.alert doesn't work well on web, use confirm fallback
+    if (typeof window !== "undefined" && window.confirm) {
+      if (window.confirm("Are you sure you want to sign out?")) {
+        logout();
+      }
+    } else {
+      Alert.alert("Logout", "Are you sure?", [
+        { text: "Cancel", style: "cancel" },
+        { text: "Logout", style: "destructive", onPress: logout },
+      ]);
+    }
   };
 
   return (

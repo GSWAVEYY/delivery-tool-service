@@ -1,7 +1,44 @@
 import { create } from "zustand";
+import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import type { User } from "../types";
 import api from "../services/api";
+
+// Platform-aware token storage: localStorage on web, SecureStore on native
+const tokenStorage = {
+  async get(key: string): Promise<string | null> {
+    try {
+      if (Platform.OS === "web") {
+        return localStorage.getItem(key);
+      }
+      return await SecureStore.getItemAsync(key);
+    } catch {
+      return null;
+    }
+  },
+  async set(key: string, value: string): Promise<void> {
+    try {
+      if (Platform.OS === "web") {
+        localStorage.setItem(key, value);
+        return;
+      }
+      await SecureStore.setItemAsync(key, value);
+    } catch {
+      // Silently fail
+    }
+  },
+  async remove(key: string): Promise<void> {
+    try {
+      if (Platform.OS === "web") {
+        localStorage.removeItem(key);
+        return;
+      }
+      await SecureStore.deleteItemAsync(key);
+    } catch {
+      // Silently fail
+    }
+  },
+};
 
 interface AuthState {
   user: User | null;
@@ -31,14 +68,14 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     const { user, token } = await api.login({ email, password });
     api.setToken(token);
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await tokenStorage.set(TOKEN_KEY, token);
     set({ user, token, isAuthenticated: true });
   },
 
   register: async (data) => {
     const { user, token } = await api.register(data);
     api.setToken(token);
-    await SecureStore.setItemAsync(TOKEN_KEY, token);
+    await tokenStorage.set(TOKEN_KEY, token);
     set({ user, token, isAuthenticated: true });
   },
 
@@ -49,13 +86,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Ignore logout errors
     }
     api.setToken(null);
-    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await tokenStorage.remove(TOKEN_KEY);
     set({ user: null, token: null, isAuthenticated: false });
   },
 
   loadSession: async () => {
     try {
-      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      const token = await tokenStorage.get(TOKEN_KEY);
       if (token) {
         api.setToken(token);
         const { user } = await api.getMe();
@@ -63,7 +100,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         return;
       }
     } catch {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
+      await tokenStorage.remove(TOKEN_KEY);
     }
     set({ isLoading: false });
   },

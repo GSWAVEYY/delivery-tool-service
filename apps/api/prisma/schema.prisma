@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User & Auth ────────────────────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  phone         String?
+  avatarUrl     String?
+  role          UserRole @default(WORKER)
+  isPremium     Boolean  @default(false)
+  premiumUntil  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  platformLinks   PlatformLink[]
+  sessions        Session[]
+  hub             HubMembership?
+  earnings        EarningRecord[]
+  shifts          Shift[]
+  notifications   Notification[]
+
+  @@index([email])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  token        String   @unique
+  deviceInfo   String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+enum UserRole {
+  WORKER
+  HUB_ADMIN
+  SUPER_ADMIN
+}
+
+// ─── Delivery Platforms ─────────────────────────────────────
+
+model DeliveryPlatform {
+  id              String   @id @default(cuid())
+  name            String   @unique
+  slug            String   @unique
+  logoUrl         String?
+  deepLinkScheme  String?    // e.g. "amazon-flex://"
+  webPortalUrl    String?    // e.g. "https://flex.amazon.com"
+  androidPackage  String?    // e.g. "com.amazon.flex"
+  iosScheme       String?    // e.g. "amazonflex://"
+  hasOfficialApi  Boolean  @default(false)
+  apiBaseUrl      String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  platformLinks PlatformLink[]
+
+  @@index([slug])
+}
+
+model PlatformLink {
+  id            String   @id @default(cuid())
+  userId        String
+  platformId    String
+  displayName   String?   // User's custom label, e.g. "My Amazon DSP"
+  username      String?   // Stored for display only (Phase 1)
+  isActive      Boolean  @default(true)
+  lastAccessed  DateTime?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Phase 2: Encrypted credential vault fields
+  encryptedCredentials  Bytes?
+  credentialIv          Bytes?
+  credentialTag         Bytes?
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform DeliveryPlatform @relation(fields: [platformId], references: [id])
+
+  @@unique([userId, platformId])
+  @@index([userId])
+}
+
+// ─── Delivery Hubs (B2B) ────────────────────────────────────
+
+model Hub {
+  id          String   @id @default(cuid())
+  name        String
+  address     String?
+  city        String?
+  state       String?
+  zip         String?
+  phone       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members HubMembership[]
+
+  @@index([name])
+}
+
+model HubMembership {
+  id        String         @id @default(cuid())
+  userId    String         @unique
+  hubId     String
+  role      HubRole        @default(DRIVER)
+  joinedAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hub  Hub  @relation(fields: [hubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hubId])
+  @@index([hubId])
+}
+
+enum HubRole {
+  DRIVER
+  DISPATCHER
+  MANAGER
+  OWNER
+}
+
+// ─── Earnings & Shifts ──────────────────────────────────────
+
+model EarningRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  platform    String   // Platform name snapshot
+  amount      Decimal  @db.Decimal(10, 2)
+  currency    String   @default("USD")
+  tips        Decimal? @db.Decimal(10, 2)
+  date        DateTime
+  description String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+}
+
+model Shift {
+  id          String      @id @default(cuid())
+  userId      String
+  platform    String
+  startTime   DateTime
+  endTime     DateTime?
+  status      ShiftStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startTime])
+}
+
+enum ShiftStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ─── Notifications ──────────────────────────────────────────
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String   @default("info")
+  isRead    Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}

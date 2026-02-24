@@ -1,0 +1,25 @@
+{
+  "name": "delivery-tool-service",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "api": "npm run dev --workspace=apps/api",
+    "api:build": "npm run build --workspace=apps/api",
+    "api:migrate": "npm run migrate --workspace=apps/api",
+    "api:seed": "npm run seed --workspace=apps/api",
+    "shared:build": "npm run build --workspace=packages/shared",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "eslint": "^9.0.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

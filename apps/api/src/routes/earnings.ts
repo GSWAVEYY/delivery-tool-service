@@ -3,23 +3,26 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { authenticate } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { asyncHandler } from "../lib/errors.js";
 
 const router = Router();
 router.use(authenticate);
 
-// ─── GET /earnings — List earnings with filters ─────────────
+// ─── GET /earnings ──────────────────────────────────────────
 
-router.get("/", async (req: Request, res: Response) => {
-  try {
+router.get(
+  "/",
+  asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const { platform, from, to, page = "1", limit = "20" } = req.query;
 
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
     if (platform) where.platform = platform as string;
     if (from || to) {
-      where.date = {};
-      if (from) where.date.gte = new Date(from as string);
-      if (to) where.date.lte = new Date(to as string);
+      where.date = {
+        ...(from && { gte: new Date(from as string) }),
+        ...(to && { lte: new Date(to as string) }),
+      };
     }
 
     const skip = (Number(page) - 1) * Number(limit);
@@ -43,16 +46,14 @@ router.get("/", async (req: Request, res: Response) => {
         totalPages: Math.ceil(total / Number(limit)),
       },
     });
-  } catch (err) {
-    console.error("List earnings error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
-// ─── GET /earnings/summary — Aggregated earnings stats ──────
+// ─── GET /earnings/summary ──────────────────────────────────
 
-router.get("/summary", async (req: Request, res: Response) => {
-  try {
+router.get(
+  "/summary",
+  asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const now = new Date();
 
@@ -66,18 +67,12 @@ router.get("/summary", async (req: Request, res: Response) => {
         _count: true,
       }),
       prisma.earningRecord.aggregate({
-        where: {
-          userId,
-          date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        },
+        where: { userId, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
         _sum: { amount: true, tips: true },
         _count: true,
       }),
       prisma.earningRecord.aggregate({
-        where: {
-          userId,
-          date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) },
-        },
+        where: { userId, date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
         _sum: { amount: true, tips: true },
         _count: true,
       }),
@@ -88,19 +83,22 @@ router.get("/summary", async (req: Request, res: Response) => {
       }),
     ]);
 
-    res.json({
-      today: { earnings: Number(today._sum.amount || 0), tips: Number(today._sum.tips || 0), deliveries: today._count },
-      thisWeek: { earnings: Number(thisWeek._sum.amount || 0), tips: Number(thisWeek._sum.tips || 0), deliveries: thisWeek._count },
-      thisMonth: { earnings: Number(thisMonth._sum.amount || 0), tips: Number(thisMonth._sum.tips || 0), deliveries: thisMonth._count },
-      allTime: { earnings: Number(allTime._sum.amount || 0), tips: Number(allTime._sum.tips || 0), deliveries: allTime._count },
+    const fmt = (agg: typeof today) => ({
+      earnings: Number(agg._sum.amount || 0),
+      tips: Number(agg._sum.tips || 0),
+      deliveries: agg._count,
     });
-  } catch (err) {
-    console.error("Earnings summary error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
 
-// ─── POST /earnings — Add earning record ────────────────────
+    res.json({
+      today: fmt(today),
+      thisWeek: fmt(thisWeek),
+      thisMonth: fmt(thisMonth),
+      allTime: fmt(allTime),
+    });
+  }),
+);
+
+// ─── POST /earnings ─────────────────────────────────────────
 
 const createEarningSchema = z.object({
   platform: z.string().min(1),
@@ -110,8 +108,10 @@ const createEarningSchema = z.object({
   description: z.string().optional(),
 });
 
-router.post("/", validate(createEarningSchema), async (req: Request, res: Response) => {
-  try {
+router.post(
+  "/",
+  validate(createEarningSchema),
+  asyncHandler(async (req: Request, res: Response) => {
     const earning = await prisma.earningRecord.create({
       data: {
         userId: req.user!.userId,
@@ -122,12 +122,8 @@ router.post("/", validate(createEarningSchema), async (req: Request, res: Respon
         description: req.body.description,
       },
     });
-
     res.status(201).json({ earning });
-  } catch (err) {
-    console.error("Create earning error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 export default router;

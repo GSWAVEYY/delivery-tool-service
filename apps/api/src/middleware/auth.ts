@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from "express";
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import prisma from "../lib/prisma.js";
+import { env } from "../lib/env.js";
 
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret-change-me";
+const JWT_SECRET = env.JWT_SECRET;
 
 export interface AuthPayload {
   userId: string;
@@ -11,6 +12,7 @@ export interface AuthPayload {
 }
 
 declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
       user?: AuthPayload;
@@ -66,7 +68,10 @@ export function generateToken(user: { id: string; email: string; role: string })
   return jwt.sign(
     { userId: user.id, email: user.email, role: user.role } satisfies AuthPayload,
     JWT_SECRET,
-    { expiresIn: (process.env.JWT_EXPIRES_IN || "7d") as jwt.SignOptions["expiresIn"] }
+    {
+      expiresIn: env.JWT_EXPIRES_IN as jwt.SignOptions["expiresIn"],
+      jwtid: crypto.randomUUID(), // Ensures uniqueness even within the same second
+    },
   );
 }
 

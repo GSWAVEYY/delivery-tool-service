@@ -4,10 +4,9 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { authenticate, generateToken } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { AppError, asyncHandler } from "../lib/errors.js";
 
 const router = Router();
-
-// ─── Schemas ────────────────────────────────────────────────
 
 const registerSchema = z.object({
   email: z.string().email(),
@@ -24,15 +23,14 @@ const loginSchema = z.object({
 
 // ─── POST /auth/register ────────────────────────────────────
 
-router.post("/register", validate(registerSchema), async (req: Request, res: Response) => {
-  try {
+router.post(
+  "/register",
+  validate(registerSchema),
+  asyncHandler(async (req: Request, res: Response) => {
     const { email, password, firstName, lastName, phone } = req.body;
 
     const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      res.status(409).json({ error: "Email already registered" });
-      return;
-    }
+    if (existing) throw AppError.conflict("Email already registered");
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await prisma.user.create({
@@ -41,7 +39,6 @@ router.post("/register", validate(registerSchema), async (req: Request, res: Res
     });
 
     const token = generateToken(user);
-
     await prisma.session.create({
       data: {
         userId: user.id,
@@ -51,32 +48,29 @@ router.post("/register", validate(registerSchema), async (req: Request, res: Res
     });
 
     res.status(201).json({ user, token });
-  } catch (err) {
-    console.error("Register error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 // ─── POST /auth/login ───────────────────────────────────────
 
-router.post("/login", validate(loginSchema), async (req: Request, res: Response) => {
-  try {
+router.post(
+  "/login",
+  validate(loginSchema),
+  asyncHandler(async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
-    }
+    if (!user) throw AppError.unauthorized("Invalid email or password");
 
     const valid = await bcrypt.compare(password, user.passwordHash);
-    if (!valid) {
-      res.status(401).json({ error: "Invalid email or password" });
-      return;
-    }
+    if (!valid) throw AppError.unauthorized("Invalid email or password");
+
+    // Clean up expired sessions for this user before creating a new one
+    await prisma.session.deleteMany({
+      where: { userId: user.id, expiresAt: { lt: new Date() } },
+    });
 
     const token = generateToken(user);
-
     await prisma.session.create({
       data: {
         userId: user.id,
@@ -96,16 +90,15 @@ router.post("/login", validate(loginSchema), async (req: Request, res: Response)
       },
       token,
     });
-  } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 // ─── GET /auth/me ───────────────────────────────────────────
 
-router.get("/me", authenticate, async (req: Request, res: Response) => {
-  try {
+router.get(
+  "/me",
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
       select: {
@@ -122,29 +115,21 @@ router.get("/me", authenticate, async (req: Request, res: Response) => {
       },
     });
 
-    if (!user) {
-      res.status(404).json({ error: "User not found" });
-      return;
-    }
-
+    if (!user) throw AppError.notFound("User not found");
     res.json({ user });
-  } catch (err) {
-    console.error("Get me error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 // ─── POST /auth/logout ──────────────────────────────────────
 
-router.post("/logout", authenticate, async (req: Request, res: Response) => {
-  try {
+router.post(
+  "/logout",
+  authenticate,
+  asyncHandler(async (req: Request, res: Response) => {
     const token = req.headers.authorization!.slice(7);
     await prisma.session.deleteMany({ where: { token } });
     res.json({ message: "Logged out" });
-  } catch (err) {
-    console.error("Logout error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 export default router;

@@ -11,13 +11,31 @@
     "api:migrate": "npm run migrate --workspace=apps/api",
     "api:seed": "npm run seed --workspace=apps/api",
     "shared:build": "npm run build --workspace=packages/shared",
-    "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "lint": "eslint apps/api/src --ext .ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test --workspace=apps/api",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,md,yml}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.39.3",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
     "typescript": "^5.7.0",
-    "eslint": "^9.0.0",
-    "@types/node": "^22.0.0"
+    "typescript-eslint": "^8.56.1"
   },
   "engines": {
     "node": ">=20.0.0"

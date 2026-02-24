@@ -3,13 +3,16 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { authenticate, optionalAuth } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { AppError, asyncHandler } from "../lib/errors.js";
 
 const router = Router();
 
-// ─── GET /platforms — List all delivery platforms ────────────
+// ─── GET /platforms ─────────────────────────────────────────
 
-router.get("/", optionalAuth, async (_req: Request, res: Response) => {
-  try {
+router.get(
+  "/",
+  optionalAuth,
+  asyncHandler(async (_req: Request, res: Response) => {
     const platforms = await prisma.deliveryPlatform.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
@@ -25,18 +28,15 @@ router.get("/", optionalAuth, async (_req: Request, res: Response) => {
         hasOfficialApi: true,
       },
     });
-
     res.json({ platforms });
-  } catch (err) {
-    console.error("List platforms error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
-// ─── GET /platforms/search?q= — Search platforms ────────────
+// ─── GET /platforms/search ──────────────────────────────────
 
-router.get("/search", async (req: Request, res: Response) => {
-  try {
+router.get(
+  "/search",
+  asyncHandler(async (req: Request, res: Response) => {
     const q = (req.query.q as string) || "";
     const platforms = await prisma.deliveryPlatform.findMany({
       where: {
@@ -49,36 +49,23 @@ router.get("/search", async (req: Request, res: Response) => {
       orderBy: { name: "asc" },
       take: 20,
     });
-
     res.json({ platforms });
-  } catch (err) {
-    console.error("Search platforms error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
-// ─── GET /platforms/:slug — Get single platform ─────────────
+// ─── GET /platforms/:slug ───────────────────────────────────
 
-router.get("/:slug", async (req: Request, res: Response) => {
-  try {
+router.get(
+  "/:slug",
+  asyncHandler(async (req: Request, res: Response) => {
     const slug = req.params.slug as string;
-    const platform = await prisma.deliveryPlatform.findUnique({
-      where: { slug },
-    });
-
-    if (!platform) {
-      res.status(404).json({ error: "Platform not found" });
-      return;
-    }
-
+    const platform = await prisma.deliveryPlatform.findUnique({ where: { slug } });
+    if (!platform) throw AppError.notFound("Platform not found");
     res.json({ platform });
-  } catch (err) {
-    console.error("Get platform error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
-// ─── POST /platforms (admin) — Add platform ─────────────────
+// ─── POST /platforms (admin) ────────────────────────────────
 
 const createPlatformSchema = z.object({
   name: z.string().min(1),
@@ -92,19 +79,15 @@ const createPlatformSchema = z.object({
   apiBaseUrl: z.string().url().optional(),
 });
 
-router.post("/", authenticate, validate(createPlatformSchema), async (req: Request, res: Response) => {
-  try {
-    if (req.user!.role !== "SUPER_ADMIN") {
-      res.status(403).json({ error: "Admin access required" });
-      return;
-    }
-
+router.post(
+  "/",
+  authenticate,
+  validate(createPlatformSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    if (req.user!.role !== "SUPER_ADMIN") throw AppError.forbidden("Admin access required");
     const platform = await prisma.deliveryPlatform.create({ data: req.body });
     res.status(201).json({ platform });
-  } catch (err) {
-    console.error("Create platform error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 export default router;

@@ -3,39 +3,34 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { authenticate } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
+import { AppError, asyncHandler } from "../lib/errors.js";
 
 const router = Router();
 router.use(authenticate);
 
-// ─── GET /shifts — List shifts ──────────────────────────────
+// ─── GET /shifts ────────────────────────────────────────────
 
-router.get("/", async (req: Request, res: Response) => {
-  try {
+router.get(
+  "/",
+  asyncHandler(async (req: Request, res: Response) => {
     const userId = req.user!.userId;
     const { status, from, to } = req.query;
 
-    const where: any = { userId };
+    const where: Record<string, unknown> = { userId };
     if (status) where.status = status;
     if (from || to) {
-      where.startTime = {};
-      if (from) where.startTime.gte = new Date(from as string);
-      if (to) where.startTime.lte = new Date(to as string);
+      where.startTime = {
+        ...(from && { gte: new Date(from as string) }),
+        ...(to && { lte: new Date(to as string) }),
+      };
     }
 
-    const shifts = await prisma.shift.findMany({
-      where,
-      orderBy: { startTime: "desc" },
-      take: 50,
-    });
-
+    const shifts = await prisma.shift.findMany({ where, orderBy: { startTime: "desc" }, take: 50 });
     res.json({ shifts });
-  } catch (err) {
-    console.error("List shifts error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
-// ─── POST /shifts — Create shift ────────────────────────────
+// ─── POST /shifts ───────────────────────────────────────────
 
 const createShiftSchema = z.object({
   platform: z.string().min(1),
@@ -45,8 +40,10 @@ const createShiftSchema = z.object({
   notes: z.string().optional(),
 });
 
-router.post("/", validate(createShiftSchema), async (req: Request, res: Response) => {
-  try {
+router.post(
+  "/",
+  validate(createShiftSchema),
+  asyncHandler(async (req: Request, res: Response) => {
     const shift = await prisma.shift.create({
       data: {
         userId: req.user!.userId,
@@ -57,15 +54,11 @@ router.post("/", validate(createShiftSchema), async (req: Request, res: Response
         notes: req.body.notes,
       },
     });
-
     res.status(201).json({ shift });
-  } catch (err) {
-    console.error("Create shift error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
-// ─── PATCH /shifts/:id — Update shift ───────────────────────
+// ─── PATCH /shifts/:id ─────────────────────────────────────
 
 const updateShiftSchema = z.object({
   status: z.enum(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]).optional(),
@@ -73,17 +66,13 @@ const updateShiftSchema = z.object({
   notes: z.string().optional(),
 });
 
-router.patch("/:id", validate(updateShiftSchema), async (req: Request, res: Response) => {
-  try {
+router.patch(
+  "/:id",
+  validate(updateShiftSchema),
+  asyncHandler(async (req: Request, res: Response) => {
     const id = req.params.id as string;
-    const shift = await prisma.shift.findFirst({
-      where: { id, userId: req.user!.userId },
-    });
-
-    if (!shift) {
-      res.status(404).json({ error: "Shift not found" });
-      return;
-    }
+    const shift = await prisma.shift.findFirst({ where: { id, userId: req.user!.userId } });
+    if (!shift) throw AppError.notFound("Shift not found");
 
     const updated = await prisma.shift.update({
       where: { id: shift.id },
@@ -93,12 +82,8 @@ router.patch("/:id", validate(updateShiftSchema), async (req: Request, res: Resp
         ...(req.body.notes !== undefined && { notes: req.body.notes }),
       },
     });
-
     res.json({ shift: updated });
-  } catch (err) {
-    console.error("Update shift error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  }),
+);
 
 export default router;

@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import rateLimit from "express-rate-limit";
+import { env } from "./lib/env.js";
+import { errorHandler } from "./lib/errors.js";
 import authRoutes from "./routes/auth.js";
 import platformRoutes from "./routes/platforms.js";
 import dashboardRoutes from "./routes/dashboard.js";
@@ -10,17 +13,36 @@ import shiftRoutes from "./routes/shifts.js";
 import hubRoutes from "./routes/hubs.js";
 
 const app = express();
-const PORT = parseInt(process.env.PORT || "3001", 10);
 
-// ─── Middleware ──────────────────────────────────────────────
+// ─── Security & Parsing ─────────────────────────────────────
 
 app.use(helmet());
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "*",
-  credentials: true,
-}));
-app.use(express.json());
-app.use(morgan("dev"));
+app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(express.json({ limit: "1mb" }));
+
+// ─── Rate Limiting ──────────────────────────────────────────
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" },
+});
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20, // stricter for auth endpoints
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many auth attempts, please try again later" },
+});
+
+// ─── Logging ────────────────────────────────────────────────
+
+if (env.NODE_ENV !== "test") {
+  app.use(morgan(env.NODE_ENV === "production" ? "combined" : "dev"));
+}
 
 // ─── Health Check ───────────────────────────────────────────
 
@@ -30,30 +52,29 @@ app.get("/health", (_req, res) => {
 
 // ─── Routes ─────────────────────────────────────────────────
 
-app.use("/api/auth", authRoutes);
-app.use("/api/platforms", platformRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/earnings", earningsRoutes);
-app.use("/api/shifts", shiftRoutes);
-app.use("/api/hubs", hubRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
+app.use("/api/platforms", apiLimiter, platformRoutes);
+app.use("/api/dashboard", apiLimiter, dashboardRoutes);
+app.use("/api/earnings", apiLimiter, earningsRoutes);
+app.use("/api/shifts", apiLimiter, shiftRoutes);
+app.use("/api/hubs", apiLimiter, hubRoutes);
 
-// ─── 404 Handler ────────────────────────────────────────────
+// ─── 404 ────────────────────────────────────────────────────
 
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
-// ─── Error Handler ──────────────────────────────────────────
+// ─── Centralized Error Handler ──────────────────────────────
 
-app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal server error" });
-});
+app.use(errorHandler);
 
-// ─── Start ──────────────────────────────────────────────────
+// ─── Start (only when run directly, not imported for tests) ─
 
-app.listen(PORT, () => {
-  console.log(`DeliveryBridge API running on port ${PORT}`);
-});
+if (env.NODE_ENV !== "test") {
+  app.listen(env.PORT, () => {
+    console.log(`DeliveryBridge API running on port ${env.PORT}`); // eslint-disable-line no-console
+  });
+}
 
 export default app;

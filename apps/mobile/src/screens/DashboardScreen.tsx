@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useAuthStore } from "../store/auth";
 import { useDashboardStore } from "../store/dashboard";
-import type { PlatformLink } from "@deliverybridge/shared";
+import type { PlatformLink } from "../types";
 
 export default function DashboardScreen() {
   const { user } = useAuthStore();
@@ -51,7 +51,7 @@ export default function DashboardScreen() {
             [
               { text: "Cancel", style: "cancel" },
               { text: "Open Store", onPress: () => Linking.openURL(playStoreUrl) },
-            ]
+            ],
           );
           return;
         }
@@ -67,9 +67,7 @@ export default function DashboardScreen() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.greeting}>
-          Hey, {user?.firstName || "Driver"}
-        </Text>
+        <Text style={styles.greeting}>Hey, {user?.firstName || "Driver"}</Text>
         <Text style={styles.subtitle}>Your delivery hub</Text>
       </View>
 
@@ -77,9 +75,7 @@ export default function DashboardScreen() {
       {data?.earningsSummary && (
         <View style={styles.earningsCard}>
           <Text style={styles.earningsTitle}>Last 7 Days</Text>
-          <Text style={styles.earningsAmount}>
-            ${data.earningsSummary.last7Days.toFixed(2)}
-          </Text>
+          <Text style={styles.earningsAmount}>${data.earningsSummary.last7Days.toFixed(2)}</Text>
           {data.earningsSummary.tips7Days > 0 && (
             <Text style={styles.earningsTips}>
               +${data.earningsSummary.tips7Days.toFixed(2)} tips
@@ -133,9 +129,7 @@ export default function DashboardScreen() {
                 activeOpacity={0.7}
               >
                 <View style={styles.platformIcon}>
-                  <Text style={styles.platformInitial}>
-                    {link.platform.name.charAt(0)}
-                  </Text>
+                  <Text style={styles.platformInitial}>{link.platform.name.charAt(0)}</Text>
                 </View>
                 <Text style={styles.platformName} numberOfLines={1}>
                   {link.displayName || link.platform.name}

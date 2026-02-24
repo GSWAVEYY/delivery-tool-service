@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, RefreshControl } from "react-native";
-import type { EarningsSummary } from "@deliverybridge/shared";
+import type { EarningsSummary } from "../types";
 import api from "../services/api";
 
 export default function EarningsScreen() {
@@ -28,23 +28,13 @@ export default function EarningsScreen() {
     fetchSummary();
   }, []);
 
-  const StatCard = ({
-    label,
-    data,
-  }: {
-    label: string;
-    data: EarningsSummary;
-  }) => (
+  const StatCard = ({ label, data }: { label: string; data: EarningsSummary }) => (
     <View style={styles.statCard}>
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statAmount}>${data.earnings.toFixed(2)}</Text>
       <View style={styles.statRow}>
-        <Text style={styles.statDetail}>
-          {data.deliveries} deliveries
-        </Text>
-        {data.tips > 0 && (
-          <Text style={styles.statTips}>+${data.tips.toFixed(2)} tips</Text>
-        )}
+        <Text style={styles.statDetail}>{data.deliveries} deliveries</Text>
+        {data.tips > 0 && <Text style={styles.statTips}>+${data.tips.toFixed(2)} tips</Text>}
       </View>
     </View>
   );
@@ -67,9 +57,7 @@ export default function EarningsScreen() {
         </View>
       ) : (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>
-            {loading ? "Loading..." : "No earnings data yet"}
-          </Text>
+          <Text style={styles.emptyText}>{loading ? "Loading..." : "No earnings data yet"}</Text>
         </View>
       )}
     </ScrollView>

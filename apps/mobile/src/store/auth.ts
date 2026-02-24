@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
-import type { User } from "@deliverybridge/shared";
+import type { User } from "../types";
 import api from "../services/api";
 
 interface AuthState {
@@ -10,7 +10,12 @@ interface AuthState {
   isAuthenticated: boolean;
 
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; firstName: string; lastName: string }) => Promise<void>;
+  register: (data: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   loadSession: () => Promise<void>;
 }

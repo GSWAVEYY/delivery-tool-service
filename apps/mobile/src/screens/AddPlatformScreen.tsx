@@ -1,14 +1,6 @@
 import React, { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  FlatList,
-  StyleSheet,
-  Alert,
-} from "react-native";
-import type { DeliveryPlatform } from "@deliverybridge/shared";
+import { View, Text, TextInput, TouchableOpacity, FlatList, StyleSheet, Alert } from "react-native";
+import type { DeliveryPlatform } from "../types";
 import api from "../services/api";
 import { useDashboardStore } from "../store/dashboard";
 
@@ -89,14 +81,9 @@ export default function AddPlatformScreen({ onDone }: Props) {
         data={platforms}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TouchableOpacity
-            style={styles.platformRow}
-            onPress={() => handleAdd(item)}
-          >
+          <TouchableOpacity style={styles.platformRow} onPress={() => handleAdd(item)}>
             <View style={styles.platformIcon}>
-              <Text style={styles.platformInitial}>
-                {item.name.charAt(0)}
-              </Text>
+              <Text style={styles.platformInitial}>{item.name.charAt(0)}</Text>
             </View>
             <View style={styles.platformInfo}>
               <Text style={styles.platformName}>{item.name}</Text>

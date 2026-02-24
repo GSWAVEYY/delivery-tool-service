@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { DashboardData, PlatformLink } from "@deliverybridge/shared";
+import type { DashboardData, PlatformLink } from "../types";
 import api from "../services/api";
 
 interface DashboardState {

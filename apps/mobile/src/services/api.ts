@@ -7,7 +7,7 @@ import type {
   PlatformLink,
   PlatformLaunchData,
   EarningsSummary,
-} from "@deliverybridge/shared";
+} from "../types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api";
 
@@ -71,7 +71,11 @@ class ApiClient {
     return this.request("/dashboard");
   }
 
-  async linkPlatform(data: { platformId: string; displayName?: string; username?: string }): Promise<{ link: PlatformLink }> {
+  async linkPlatform(data: {
+    platformId: string;
+    displayName?: string;
+    username?: string;
+  }): Promise<{ link: PlatformLink }> {
     return this.request("/dashboard/link", {
       method: "POST",
       body: JSON.stringify(data),

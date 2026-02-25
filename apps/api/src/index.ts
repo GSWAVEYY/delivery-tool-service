@@ -17,7 +17,25 @@ const app = express();
 // ─── Security & Parsing ─────────────────────────────────────
 
 app.use(helmet());
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+// Support comma-separated origins, or wildcard
+const allowedOrigins =
+  env.CORS_ORIGIN === "*" ? "*" : env.CORS_ORIGIN.split(",").map((o) => o.trim());
+
+app.use(
+  cors({
+    origin:
+      allowedOrigins === "*"
+        ? "*"
+        : (origin, callback) => {
+            if (!origin || (allowedOrigins as string[]).includes(origin)) {
+              callback(null, true);
+            } else {
+              callback(new Error(`CORS: origin ${origin} not allowed`));
+            }
+          },
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: "1mb" }));
 
 // ─── Rate Limiting ──────────────────────────────────────────

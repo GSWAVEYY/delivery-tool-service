@@ -242,10 +242,30 @@ function CreateRouteForm({
           </>
         )}
 
+        {selectedLinkId &&
+          (() => {
+            const link = platformLinks.find((l) => l.id === selectedLinkId);
+            const platformName = link?.displayName || link?.platform.name;
+            const isMedical =
+              platformName &&
+              (platformName.toLowerCase().includes("amerisource") ||
+                platformName.toLowerCase().includes("cencora") ||
+                platformName.toLowerCase().includes("mckesson") ||
+                platformName.toLowerCase().includes("cardinal"));
+            if (!isMedical || !platformName) return null;
+            return (
+              <View style={medRouteStyles.note}>
+                <Text style={medRouteStyles.noteText}>
+                  Medical delivery route for {platformName}
+                </Text>
+              </View>
+            );
+          })()}
+
         <Text style={formStyles.label}>Route Name *</Text>
         <TextInput
           style={formStyles.input}
-          placeholder="e.g. Amazon DSP Route, Morning Run..."
+          placeholder="e.g. McKesson Morning Run, Cardinal Health Route..."
           placeholderTextColor="#475569"
           value={name}
           onChangeText={(v) => {
@@ -411,6 +431,24 @@ const formStyles = StyleSheet.create({
     color: "#FFFFFF",
   },
   disabled: { opacity: 0.5 },
+});
+
+const medRouteStyles = StyleSheet.create({
+  note: {
+    backgroundColor: "#0C2340",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#1E3A5F",
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  noteText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#93C5FD",
+  },
 });
 
 // ─── RoutesScreen ─────────────────────────────────────────

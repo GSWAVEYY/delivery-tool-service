@@ -267,6 +267,13 @@ model Stop {
   notes         String?
   proofPhotoUrl String?
 
+  // Medical delivery fields
+  facilityName   String?   // e.g. "CVS Pharmacy #4521" or "Memorial Hospital"
+  facilityType   String?   // "Pharmacy", "Hospital", "Clinic", "Patient Home", "Nursing Facility"
+  contactName    String?
+  contactPhone   String?
+  deliveryWindow String?   // e.g. "9am-12pm"
+
   route    Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
   packages Package[]
 
@@ -284,6 +291,15 @@ model Package {
   deliveredAt    DateTime?
   recipientName  String?
   notes          String?
+
+  // Medical delivery fields
+  requiresSignature    Boolean   @default(false)
+  signatureUrl         String?
+  temperatureSensitive Boolean   @default(false)
+  temperatureRange     String?   // e.g. "2-8°C" or "Room temp"
+  priority             String?   // e.g. "STAT", "Routine", "Urgent"
+  deliveryInstructions String?
+  recipientType        String?   // e.g. "Pharmacy", "Clinic", "Hospital", "Patient"
 
   route Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
   stop  Stop?  @relation(fields: [stopId], references: [id])

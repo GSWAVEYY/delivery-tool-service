@@ -227,7 +227,15 @@ class ApiClient {
 
   async addPackage(
     routeId: string,
-    data: { trackingNumber: string; barcode?: string; stopId?: string },
+    data: {
+      trackingNumber: string;
+      barcode?: string;
+      stopId?: string;
+      requiresSignature?: boolean;
+      temperatureSensitive?: boolean;
+      priority?: string;
+      recipientType?: string;
+    },
   ): Promise<{ package: Package }> {
     return this.request(`/routes/${routeId}/packages`, {
       method: "POST",

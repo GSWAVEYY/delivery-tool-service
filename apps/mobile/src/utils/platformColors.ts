@@ -1,4 +1,8 @@
 const PLATFORM_COLORS: Record<string, string> = {
+  amerisource: "#0057B8", // AmerisourceBergen/Cencora blue
+  cencora: "#0057B8",
+  mckesson: "#00857C", // McKesson teal
+  cardinal: "#C8102E", // Cardinal Health red
   amazon: "#F59E0B",
   fedex: "#8B5CF6",
   doordash: "#EF4444",

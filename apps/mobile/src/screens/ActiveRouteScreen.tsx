@@ -11,7 +11,7 @@ import {
   Linking,
 } from "react-native";
 import api from "../services/api";
-import type { RouteDetail, Stop, StopStatus } from "../types";
+import type { Package, RouteDetail, Stop, StopStatus } from "../types";
 import { getPlatformColor, getPlatformInitial } from "../utils/platformColors";
 
 const isWeb = Platform.OS === "web";
@@ -61,6 +61,117 @@ const badgeStyles = StyleSheet.create({
   text: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
 });
 
+// ─── Package priority badge ───────────────────────────────
+
+function PriorityBadge({ priority }: { priority: string }) {
+  const cfg =
+    priority === "STAT"
+      ? { bg: "#450A0A", color: "#EF4444" }
+      : priority === "Urgent"
+        ? { bg: "#451A03", color: "#F59E0B" }
+        : { bg: "#1E293B", color: "#64748B" };
+  return (
+    <View style={[medStyles.priorityBadge, { backgroundColor: cfg.bg }]}>
+      <Text style={[medStyles.priorityText, { color: cfg.color }]}>{priority}</Text>
+    </View>
+  );
+}
+
+// ─── Package row with medical indicators ─────────────────
+
+function PackageRow({ pkg }: { pkg: Package }) {
+  return (
+    <View style={stopStyles.pkgRow}>
+      <View style={{ flex: 1, marginRight: 8 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <Text style={stopStyles.pkgTracking} numberOfLines={1}>
+            {pkg.trackingNumber}
+          </Text>
+          {pkg.priority && <PriorityBadge priority={pkg.priority} />}
+          {pkg.temperatureSensitive && (
+            <Text style={medStyles.coldTag}>
+              [COLD{pkg.temperatureRange ? ` ${pkg.temperatureRange}` : ""}]
+            </Text>
+          )}
+          {pkg.requiresSignature && <Text style={medStyles.sigTag}>[SIG]</Text>}
+        </View>
+        {pkg.recipientType && <Text style={medStyles.recipientType}>{pkg.recipientType}</Text>}
+      </View>
+      <Text style={stopStyles.pkgStatus}>{pkg.status.replace(/_/g, " ")}</Text>
+    </View>
+  );
+}
+
+const medStyles = StyleSheet.create({
+  facilityName: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#F8FAFC",
+    marginBottom: 2,
+  },
+  facilityBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 5,
+    backgroundColor: "#1E3A5F",
+    marginBottom: 4,
+  },
+  facilityBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#93C5FD",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  deliveryWindow: {
+    fontSize: 12,
+    color: "#F59E0B",
+    fontWeight: "600",
+  },
+  contactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+  },
+  contactName: {
+    fontSize: 12,
+    color: "#94A3B8",
+  },
+  contactPhone: {
+    fontSize: 12,
+    color: "#3B82F6",
+    fontWeight: "600",
+  },
+  priorityBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  priorityText: {
+    fontSize: 9,
+    fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 0.3,
+  },
+  coldTag: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#22D3EE",
+  },
+  sigTag: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#F59E0B",
+  },
+  recipientType: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
+  },
+});
+
 // ─── Stop Card ────────────────────────────────────────────
 
 function StopCard({
@@ -79,6 +190,16 @@ function StopCard({
     setUpdating(false);
   };
 
+  const callContact = () => {
+    if (!stop.contactPhone) return;
+    const url = `tel:${stop.contactPhone}`;
+    if (isWeb) {
+      window.open(url);
+    } else {
+      Linking.openURL(url).catch(() => {});
+    }
+  };
+
   return (
     <TouchableOpacity
       style={stopStyles.card}
@@ -90,13 +211,39 @@ function StopCard({
           <Text style={stopStyles.seqText}>#{stop.sequence}</Text>
         </View>
         <View style={stopStyles.addrCol}>
-          <Text style={stopStyles.address} numberOfLines={1}>
+          {stop.facilityName && (
+            <Text style={medStyles.facilityName} numberOfLines={1}>
+              {stop.facilityName}
+            </Text>
+          )}
+          {stop.facilityType && (
+            <View style={medStyles.facilityBadge}>
+              <Text style={medStyles.facilityBadgeText}>{stop.facilityType}</Text>
+            </View>
+          )}
+          <Text
+            style={stop.facilityName ? stopStyles.cityLine : stopStyles.address}
+            numberOfLines={1}
+          >
             {stop.address}
           </Text>
           {(stop.city || stop.state) && (
             <Text style={stopStyles.cityLine}>
               {[stop.city, stop.state, stop.zipCode].filter(Boolean).join(", ")}
             </Text>
+          )}
+          {stop.deliveryWindow && (
+            <Text style={medStyles.deliveryWindow}>Window: {stop.deliveryWindow}</Text>
+          )}
+          {(stop.contactName || stop.contactPhone) && (
+            <View style={medStyles.contactRow}>
+              {stop.contactName && <Text style={medStyles.contactName}>{stop.contactName}</Text>}
+              {stop.contactPhone && (
+                <TouchableOpacity onPress={callContact} activeOpacity={0.7}>
+                  <Text style={medStyles.contactPhone}>{stop.contactPhone}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
         <View style={stopStyles.rightCol}>
@@ -112,12 +259,7 @@ function StopCard({
           {stop.packages.length > 0 && (
             <View style={stopStyles.pkgList}>
               {stop.packages.map((pkg) => (
-                <View key={pkg.id} style={stopStyles.pkgRow}>
-                  <Text style={stopStyles.pkgTracking} numberOfLines={1}>
-                    {pkg.trackingNumber}
-                  </Text>
-                  <Text style={stopStyles.pkgStatus}>{pkg.status.replace(/_/g, " ")}</Text>
-                </View>
+                <PackageRow key={pkg.id} pkg={pkg} />
               ))}
             </View>
           )}

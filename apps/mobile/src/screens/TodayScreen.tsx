@@ -310,7 +310,7 @@ export default function TodayScreen({ onViewRoute, onCreateRoute }: Props) {
               <Text style={styles.statNum}>
                 {stats.deliveredPackages}/{stats.totalPackages}
               </Text>
-              <Text style={styles.statLabel}>Packages</Text>
+              <Text style={styles.statLabel}>Deliveries</Text>
             </View>
           </View>
         )}
@@ -398,10 +398,8 @@ export default function TodayScreen({ onViewRoute, onCreateRoute }: Props) {
 
           {!loading && (!data?.todayRoutes || data.todayRoutes.length === 0) ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>No routes today</Text>
-              <Text style={styles.emptyBody}>
-                No routes assigned. Create a route or check with your hub.
-              </Text>
+              <Text style={styles.emptyTitle}>No delivery routes for today</Text>
+              <Text style={styles.emptyBody}>Create a route or check with your distributor.</Text>
               <TouchableOpacity style={styles.emptyBtn} onPress={onCreateRoute} activeOpacity={0.8}>
                 <Text style={styles.emptyBtnText}>+ Create Route</Text>
               </TouchableOpacity>

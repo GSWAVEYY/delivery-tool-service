@@ -136,6 +136,12 @@ export interface Stop {
   completedAt?: string;
   notes?: string;
   packages: Package[];
+  // Medical delivery fields
+  facilityName?: string;
+  facilityType?: string;
+  contactName?: string;
+  contactPhone?: string;
+  deliveryWindow?: string;
 }
 
 export interface Package {
@@ -149,6 +155,13 @@ export interface Package {
   deliveredAt?: string;
   recipientName?: string;
   notes?: string;
+  // Medical delivery fields
+  requiresSignature: boolean;
+  temperatureSensitive: boolean;
+  temperatureRange?: string;
+  priority?: string;
+  deliveryInstructions?: string;
+  recipientType?: string;
 }
 
 export interface TodayData {

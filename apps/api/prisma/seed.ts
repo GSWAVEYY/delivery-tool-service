@@ -4,6 +4,24 @@ const prisma = new PrismaClient();
 
 const PLATFORMS = [
   {
+    name: "AmerisourceBergen (Cencora)",
+    slug: "amerisourcebergen",
+    webPortalUrl: "https://www.cencora.com",
+    hasOfficialApi: false,
+  },
+  {
+    name: "McKesson",
+    slug: "mckesson",
+    webPortalUrl: "https://www.mckesson.com",
+    hasOfficialApi: false,
+  },
+  {
+    name: "Cardinal Health",
+    slug: "cardinal-health",
+    webPortalUrl: "https://www.cardinalhealth.com",
+    hasOfficialApi: false,
+  },
+  {
     name: "Amazon Flex",
     slug: "amazon-flex",
     deepLinkScheme: "amzn-flex://",

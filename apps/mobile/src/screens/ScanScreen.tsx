@@ -111,6 +111,13 @@ export default function ScanScreen() {
   const [trackingNum, setTrackingNum] = useState("");
   const [barcode, setBarcode] = useState("");
   const [adding, setAdding] = useState(false);
+  // Medical fields
+  const [requiresSignature, setRequiresSignature] = useState(false);
+  const [temperatureSensitive, setTemperatureSensitive] = useState(false);
+  const [priority, setPriority] = useState<"Routine" | "Urgent" | "STAT">("Routine");
+  const [recipientType, setRecipientType] = useState<
+    "Pharmacy" | "Hospital" | "Clinic" | "Patient" | "Nursing Facility"
+  >("Pharmacy");
 
   // Quick scan mode
   const [quickScanMode, setQuickScanMode] = useState(false);
@@ -222,6 +229,10 @@ export default function ScanScreen() {
       const result = await api.addPackage(selectedRouteId, {
         trackingNumber: trackingNum.trim(),
         barcode: barcode.trim() || undefined,
+        requiresSignature,
+        temperatureSensitive,
+        priority,
+        recipientType,
       });
       const pkg = result.package;
       setRecentScans((prev) =>
@@ -229,6 +240,10 @@ export default function ScanScreen() {
       );
       setTrackingNum("");
       setBarcode("");
+      setRequiresSignature(false);
+      setTemperatureSensitive(false);
+      setPriority("Routine");
+      setRecipientType("Pharmacy");
       setShowAddForm(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to add package";
@@ -439,6 +454,85 @@ export default function ScanScreen() {
                   value={barcode}
                   onChangeText={setBarcode}
                 />
+
+                {/* Priority picker */}
+                <Text style={medAddStyles.fieldLabel}>Priority</Text>
+                <View style={medAddStyles.pickerRow}>
+                  {(["Routine", "Urgent", "STAT"] as const).map((p) => (
+                    <TouchableOpacity
+                      key={p}
+                      style={[
+                        medAddStyles.pickerChip,
+                        priority === p && medAddStyles.pickerChipActive,
+                        priority === p &&
+                          p === "STAT" && { borderColor: "#EF4444", backgroundColor: "#450A0A" },
+                        priority === p &&
+                          p === "Urgent" && { borderColor: "#F59E0B", backgroundColor: "#451A03" },
+                      ]}
+                      onPress={() => setPriority(p)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          medAddStyles.pickerChipText,
+                          priority === p && p === "STAT" && { color: "#EF4444" },
+                          priority === p && p === "Urgent" && { color: "#F59E0B" },
+                          priority === p && p === "Routine" && { color: "#3B82F6" },
+                        ]}
+                      >
+                        {p}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Recipient type */}
+                <Text style={medAddStyles.fieldLabel}>Recipient Type</Text>
+                <View style={medAddStyles.pickerRow}>
+                  {(["Pharmacy", "Hospital", "Clinic", "Patient", "Nursing Facility"] as const).map(
+                    (t) => (
+                      <TouchableOpacity
+                        key={t}
+                        style={[
+                          medAddStyles.pickerChip,
+                          recipientType === t && medAddStyles.pickerChipActive,
+                        ]}
+                        onPress={() => setRecipientType(t)}
+                        activeOpacity={0.7}
+                      >
+                        <Text
+                          style={[
+                            medAddStyles.pickerChipText,
+                            recipientType === t && { color: "#3B82F6" },
+                          ]}
+                        >
+                          {t}
+                        </Text>
+                      </TouchableOpacity>
+                    ),
+                  )}
+                </View>
+
+                {/* Toggles */}
+                <View style={medAddStyles.toggleRow}>
+                  <Text style={medAddStyles.toggleLabel}>Requires Signature</Text>
+                  <Switch
+                    value={requiresSignature}
+                    onValueChange={setRequiresSignature}
+                    trackColor={{ false: "#334155", true: "#451A03" }}
+                    thumbColor={requiresSignature ? "#F59E0B" : "#64748B"}
+                  />
+                </View>
+                <View style={medAddStyles.toggleRow}>
+                  <Text style={medAddStyles.toggleLabel}>Temperature Sensitive</Text>
+                  <Switch
+                    value={temperatureSensitive}
+                    onValueChange={setTemperatureSensitive}
+                    trackColor={{ false: "#334155", true: "#0E4459" }}
+                    thumbColor={temperatureSensitive ? "#22D3EE" : "#64748B"}
+                  />
+                </View>
+
                 <View style={styles.addFormActions}>
                   <TouchableOpacity
                     style={styles.cancelBtn}
@@ -446,6 +540,10 @@ export default function ScanScreen() {
                       setShowAddForm(false);
                       setTrackingNum("");
                       setBarcode("");
+                      setRequiresSignature(false);
+                      setTemperatureSensitive(false);
+                      setPriority("Routine");
+                      setRecipientType("Pharmacy");
                     }}
                     activeOpacity={0.7}
                   >
@@ -641,6 +739,57 @@ const quickStyles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
     textTransform: "uppercase",
+  },
+});
+
+const medAddStyles = StyleSheet.create({
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#64748B",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  pickerChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  pickerChipActive: {
+    borderColor: "#3B82F6",
+    backgroundColor: "#1E3A5F",
+  },
+  pickerChipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748B",
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#334155",
+    marginTop: 6,
+  },
+  toggleLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#CBD5E1",
   },
 });
 

@@ -4,10 +4,10 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Copy package files for dependency install
-COPY package.json package-lock.json* ./
+COPY package.json ./
 
 # Install all dependencies (including devDependencies for build)
-RUN npm ci
+RUN npm install
 
 # Copy prisma schema before generating client
 COPY prisma ./prisma/
@@ -27,8 +27,8 @@ FROM node:22-alpine AS production
 WORKDIR /app
 
 # Copy package files and install production deps only
-COPY package.json package-lock.json* ./
-RUN npm ci --omit=dev
+COPY package.json ./
+RUN npm install --omit=dev --ignore-scripts
 
 # Copy compiled output from builder
 COPY --from=builder /app/dist ./dist/

@@ -1,5 +1,6 @@
 {
-  "buildCommand": "npx expo export --platform web",
+  "installCommand": "npm install --legacy-peer-deps",
+  "buildCommand": "EXPO_PUBLIC_API_URL=https://deliverybridge-api-production.up.railway.app/api npx expo export --platform web",
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]

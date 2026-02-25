@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState, useRef } from "react";
 import {
   View,
   Text,
@@ -9,42 +9,336 @@ import {
   Alert,
   StyleSheet,
   Platform,
+  TextInput,
 } from "react-native";
 import { useAuthStore } from "../store/auth";
 import { useDashboardStore } from "../store/dashboard";
-import type { PlatformLink } from "../types";
+import type { PlatformLink, Shift } from "../types";
+import api from "../services/api";
 
 interface Props {
   onAddPlatform?: () => void;
 }
 
+// ─── helpers ────────────────────────────────────────────
+
+function formatDuration(startTime: string): string {
+  const diff = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000);
+  const h = Math.floor(diff / 3600);
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+const isWeb = Platform.OS === "web";
+
+// On native, Alert.prompt exists. On web we use window.prompt.
+function webPrompt(msg: string, defaultVal = ""): string | null {
+  if (isWeb) {
+     
+    return (window as Window).prompt(msg, defaultVal);
+  }
+  return null;
+}
+
+// ─── ActiveShiftCard ────────────────────────────────────
+
+interface EndEarningsForm {
+  earnings: string;
+  tips: string;
+  deliveries: string;
+}
+
+function ActiveShiftCard({
+  shift,
+  platformLink,
+  onShiftEnded,
+}: {
+  shift: Shift;
+  platformLink: PlatformLink | undefined;
+  onShiftEnded: () => void;
+}) {
+  const [, setTick] = useState(0);
+  const [showEndForm, setShowEndForm] = useState(false);
+  const [form, setForm] = useState<EndEarningsForm>({ earnings: "", tips: "", deliveries: "" });
+  const [submitting, setSubmitting] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    timerRef.current = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const handleEnd = async () => {
+    if (!showEndForm) {
+      setShowEndForm(true);
+      return;
+    }
+
+    const earningsVal = parseFloat(form.earnings);
+    if (!form.earnings || isNaN(earningsVal)) {
+      if (isWeb) {
+        window.alert("Please enter a valid earnings amount");
+      } else {
+        Alert.alert("Error", "Please enter a valid earnings amount");
+      }
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const endTime = new Date().toISOString();
+
+      // Log earnings if platform link exists
+      if (platformLink) {
+        await api.addEarning({
+          platformLinkId: platformLink.id,
+          date: new Date().toISOString().split("T")[0],
+          earnings: earningsVal,
+          tips: form.tips ? parseFloat(form.tips) : undefined,
+          deliveries: form.deliveries ? parseInt(form.deliveries, 10) : undefined,
+        });
+      }
+
+      // End the shift
+      await api.updateShiftStatus(shift.id, { status: "COMPLETED", endTime });
+      onShiftEnded();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to end shift";
+      if (isWeb) {
+        window.alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <View style={shiftStyles.activeCard}>
+      <View style={shiftStyles.activeHeader}>
+        <View style={shiftStyles.activeDot} />
+        <Text style={shiftStyles.activeTitle}>Active Shift</Text>
+        <Text style={shiftStyles.activePlatform}>
+          {platformLink?.displayName || platformLink?.platform?.name || shift.platform}
+        </Text>
+      </View>
+      <Text style={shiftStyles.timer}>{formatDuration(shift.startTime)}</Text>
+
+      {showEndForm ? (
+        <View style={shiftStyles.endForm}>
+          <Text style={shiftStyles.endFormLabel}>How'd the shift go?</Text>
+          <TextInput
+            style={shiftStyles.input}
+            placeholder="Earnings (e.g. 84.50)"
+            placeholderTextColor="#64748B"
+            keyboardType="decimal-pad"
+            value={form.earnings}
+            onChangeText={(v) => setForm((f) => ({ ...f, earnings: v }))}
+          />
+          <TextInput
+            style={shiftStyles.input}
+            placeholder="Tips (optional)"
+            placeholderTextColor="#64748B"
+            keyboardType="decimal-pad"
+            value={form.tips}
+            onChangeText={(v) => setForm((f) => ({ ...f, tips: v }))}
+          />
+          <TextInput
+            style={shiftStyles.input}
+            placeholder="Deliveries (optional)"
+            placeholderTextColor="#64748B"
+            keyboardType="number-pad"
+            value={form.deliveries}
+            onChangeText={(v) => setForm((f) => ({ ...f, deliveries: v }))}
+          />
+          <View style={shiftStyles.endFormActions}>
+            <TouchableOpacity
+              style={shiftStyles.cancelBtn}
+              onPress={() => setShowEndForm(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={shiftStyles.cancelBtnText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[shiftStyles.endBtn, submitting && shiftStyles.btnDisabled]}
+              onPress={handleEnd}
+              activeOpacity={0.7}
+              disabled={submitting}
+            >
+              <Text style={shiftStyles.endBtnText}>{submitting ? "Saving..." : "End Shift"}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity style={shiftStyles.endBtn} onPress={handleEnd} activeOpacity={0.7}>
+          <Text style={shiftStyles.endBtnText}>End Shift</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+}
+
+// ─── StartShiftSection ──────────────────────────────────
+
+function StartShiftSection({
+  platformLinks,
+  onShiftStarted,
+}: {
+  platformLinks: PlatformLink[];
+  onShiftStarted: (shift: Shift) => void;
+}) {
+  const [selectedLinkId, setSelectedLinkId] = useState<string | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [starting, setStarting] = useState(false);
+
+  const handleStart = async () => {
+    const linkId = selectedLinkId || (platformLinks.length === 1 ? platformLinks[0].id : null);
+    if (!linkId) {
+      setShowPicker(true);
+      return;
+    }
+
+    const link = platformLinks.find((l) => l.id === linkId);
+    if (!link) return;
+
+    setStarting(true);
+    try {
+      const result = await api.createShift({
+        platformId: link.platformId,
+        startTime: new Date().toISOString(),
+      });
+      onShiftStarted(result.shift);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to start shift";
+      if (isWeb) {
+        window.alert(msg);
+      } else {
+        Alert.alert("Error", msg);
+      }
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  if (showPicker && platformLinks.length > 1) {
+    return (
+      <View style={startStyles.pickerCard}>
+        <Text style={startStyles.pickerTitle}>Choose Platform</Text>
+        {platformLinks.map((link) => (
+          <TouchableOpacity
+            key={link.id}
+            style={[
+              startStyles.pickerOption,
+              selectedLinkId === link.id && startStyles.pickerOptionSelected,
+            ]}
+            onPress={() => setSelectedLinkId(link.id)}
+            activeOpacity={0.7}
+          >
+            <View style={startStyles.pickerDot}>
+              <Text style={startStyles.pickerInitial}>{link.platform.name.charAt(0)}</Text>
+            </View>
+            <Text style={startStyles.pickerName}>{link.displayName || link.platform.name}</Text>
+            {selectedLinkId === link.id && <Text style={startStyles.checkmark}>✓</Text>}
+          </TouchableOpacity>
+        ))}
+        <View style={startStyles.pickerActions}>
+          <TouchableOpacity
+            style={startStyles.cancelBtn}
+            onPress={() => {
+              setShowPicker(false);
+              setSelectedLinkId(null);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={startStyles.cancelBtnText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[startStyles.startBtn, !selectedLinkId && startStyles.btnDisabled]}
+            onPress={handleStart}
+            disabled={!selectedLinkId || starting}
+            activeOpacity={0.7}
+          >
+            <Text style={startStyles.startBtnText}>{starting ? "Starting..." : "Start Shift"}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={startStyles.card}>
+      <Text style={startStyles.label}>Ready to work?</Text>
+      <TouchableOpacity
+        style={[startStyles.startBtn, starting && startStyles.btnDisabled]}
+        onPress={handleStart}
+        disabled={starting}
+        activeOpacity={0.8}
+      >
+        <Text style={startStyles.startBtnText}>{starting ? "Starting..." : "Start Shift"}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── DashboardScreen ────────────────────────────────────
+
 export default function DashboardScreen({ onAddPlatform }: Props) {
   const { user } = useAuthStore();
   const { data, isLoading, fetchDashboard, launchPlatform } = useDashboardStore();
+  const [activeShift, setActiveShift] = useState<Shift | null>(null);
+  const [shiftChecked, setShiftChecked] = useState(false);
 
   useEffect(() => {
     fetchDashboard();
+    fetchActiveShift();
   }, []);
+
+  const fetchActiveShift = async () => {
+    try {
+      const result = await api.getShifts("IN_PROGRESS");
+      const inProgress = result.shifts?.[0] ?? null;
+      setActiveShift(inProgress);
+    } catch {
+      // non-fatal
+    } finally {
+      setShiftChecked(true);
+    }
+  };
 
   const onRefresh = useCallback(() => {
     fetchDashboard();
+    fetchActiveShift();
   }, [fetchDashboard]);
 
   const handleLaunch = async (link: PlatformLink) => {
+    if (isWeb) {
+      const url = link.platform.webPortalUrl;
+      if (url) {
+        window.open(url, "_blank");
+        return;
+      }
+      window.alert(`No web portal available for ${link.platform.name}`);
+      return;
+    }
+
     const url = await launchPlatform(link.id);
     if (!url) {
       Alert.alert("Error", "No launch URL available for this platform");
       return;
     }
 
-    // Try deep link first, fall back to web
     const canOpen = await Linking.canOpenURL(url);
     if (canOpen) {
       await Linking.openURL(url);
     } else if (link.platform.webPortalUrl) {
       await Linking.openURL(link.platform.webPortalUrl);
     } else {
-      // Try Android package intent
       if (Platform.OS === "android" && link.platform.androidPackage) {
         const playStoreUrl = `market://details?id=${link.platform.androidPackage}`;
         const canOpenStore = await Linking.canOpenURL(playStoreUrl);
@@ -64,6 +358,11 @@ export default function DashboardScreen({ onAddPlatform }: Props) {
     }
   };
 
+  // Find the PlatformLink matching the active shift's platform
+  const activeShiftLink = activeShift
+    ? data?.platformLinks?.find((l) => l.platformId === activeShift.platform)
+    : undefined;
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -80,6 +379,27 @@ export default function DashboardScreen({ onAddPlatform }: Props) {
             <Text style={styles.brandMark}>DB</Text>
           </View>
         </View>
+
+        {/* Shift Section */}
+        {shiftChecked && (data?.platformLinks?.length ?? 0) > 0 && (
+          <View style={styles.shiftSection}>
+            {activeShift ? (
+              <ActiveShiftCard
+                shift={activeShift}
+                platformLink={activeShiftLink}
+                onShiftEnded={() => {
+                  setActiveShift(null);
+                  fetchDashboard();
+                }}
+              />
+            ) : (
+              <StartShiftSection
+                platformLinks={data?.platformLinks ?? []}
+                onShiftStarted={(shift) => setActiveShift(shift)}
+              />
+            )}
+          </View>
+        )}
 
         {/* Earnings Summary Card */}
         {data?.earningsSummary && (
@@ -186,6 +506,199 @@ export default function DashboardScreen({ onAddPlatform }: Props) {
   );
 }
 
+// ─── Styles ─────────────────────────────────────────────
+
+const shiftStyles = StyleSheet.create({
+  activeCard: {
+    backgroundColor: "#064E3B",
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#065F46",
+  },
+  activeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 8,
+  },
+  activeDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#34D399",
+  },
+  activeTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#34D399",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+  },
+  activePlatform: {
+    fontSize: 13,
+    color: "#6EE7B7",
+    marginLeft: 4,
+  },
+  timer: {
+    fontSize: 40,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 16,
+  },
+  endForm: {
+    gap: 10,
+  },
+  endFormLabel: {
+    fontSize: 14,
+    color: "#94A3B8",
+    marginBottom: 4,
+  },
+  input: {
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#1E293B",
+  },
+  endFormActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#1E293B",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  endBtn: {
+    flex: 1,
+    backgroundColor: "#EF4444",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  endBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+});
+
+const startStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#1E293B",
+    borderRadius: 16,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#F8FAFC",
+  },
+  pickerCard: {
+    backgroundColor: "#1E293B",
+    borderRadius: 16,
+    padding: 20,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 14,
+  },
+  pickerOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    marginBottom: 8,
+    backgroundColor: "#0F172A",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  pickerOptionSelected: {
+    borderColor: "#3B82F6",
+    backgroundColor: "#1E3A5F",
+  },
+  pickerDot: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#1E40AF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  pickerInitial: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  pickerName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#F8FAFC",
+  },
+  checkmark: {
+    fontSize: 16,
+    color: "#3B82F6",
+    fontWeight: "700",
+  },
+  pickerActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 8,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  startBtn: {
+    flex: 1,
+    backgroundColor: "#3B82F6",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  startBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  btnDisabled: {
+    opacity: 0.5,
+  },
+});
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -225,6 +738,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "#94A3B8",
     marginTop: 4,
+  },
+  shiftSection: {
+    marginHorizontal: 20,
+    marginBottom: 20,
   },
   earningsCard: {
     marginHorizontal: 20,

@@ -110,6 +110,41 @@ class ApiClient {
   }> {
     return this.request("/earnings/summary");
   }
+
+  async addEarning(data: {
+    platformLinkId: string;
+    date: string;
+    earnings: number;
+    tips?: number;
+    deliveries?: number;
+    notes?: string;
+  }) {
+    return this.request("/earnings", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ─── Shifts ─────────────────────────────────────────────
+
+  async getShifts(status?: string) {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return this.request<{ shifts: import("../types").Shift[] }>(`/shifts${query}`);
+  }
+
+  async createShift(data: { platformId: string; startTime: string; notes?: string }) {
+    return this.request<{ shift: import("../types").Shift }>("/shifts", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateShiftStatus(shiftId: string, data: { status: string; endTime?: string }) {
+    return this.request<{ shift: import("../types").Shift }>(`/shifts/${shiftId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
 }
 
 export const api = new ApiClient();

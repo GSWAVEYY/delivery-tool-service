@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import api from "../services/api";
 import type { RouteDetail, Stop, StopStatus } from "../types";
+import { getPlatformColor, getPlatformInitial } from "../utils/platformColors";
 
 const isWeb = Platform.OS === "web";
 
@@ -634,6 +635,25 @@ export default function ActiveRouteScreen({
     }
   };
 
+  const handleLaunchPlatform = async () => {
+    if (!route?.platformLink) return;
+    try {
+      const result = await api.launchPlatform(route.platformLink.id);
+      const url = result.launchUrl || route.platformLink.platform.webPortalUrl;
+      if (!url) return;
+      if (isWeb) {
+        window.open(url, "_blank");
+      } else {
+        Linking.openURL(url).catch(() => {
+          if (route.platformLink?.platform.webPortalUrl)
+            Linking.openURL(route.platformLink.platform.webPortalUrl);
+        });
+      }
+    } catch {
+      // non-fatal
+    }
+  };
+
   const handleNavigateNext = () => {
     if (!route) return;
     const sorted = route.stops.slice().sort((a, b) => a.sequence - b.sequence);
@@ -703,11 +723,39 @@ export default function ActiveRouteScreen({
       </View>
 
       <View style={styles.titleRow}>
-        <Text style={styles.routeName} numberOfLines={1}>
-          {route.name || `Route ${route.id.slice(-6)}`}
-        </Text>
-        {route.platformLink && (
-          <Text style={styles.platform}>{route.platformLink.platform?.name}</Text>
+        <View style={styles.titleMainRow}>
+          {route.platformLink?.platform &&
+            (() => {
+              const pColor = getPlatformColor(route.platformLink.platform.name);
+              const pInitial = getPlatformInitial(route.platformLink.platform.name);
+              return (
+                <View
+                  style={[
+                    styles.platformIcon,
+                    { backgroundColor: pColor + "22", borderColor: pColor + "44" },
+                  ]}
+                >
+                  <Text style={[styles.platformInitial, { color: pColor }]}>{pInitial}</Text>
+                </View>
+              );
+            })()}
+          <Text style={styles.routeName} numberOfLines={1}>
+            {route.name || `Route ${route.id.slice(-6)}`}
+          </Text>
+        </View>
+        {route.platformLink?.platform && (
+          <View style={styles.platformRow}>
+            <Text style={styles.platformLabel}>{route.platformLink.platform.name}</Text>
+            <TouchableOpacity
+              style={styles.openPlatformBtn}
+              onPress={handleLaunchPlatform}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.openPlatformText}>
+                Open {route.platformLink.platform.name} App →
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
 
@@ -856,15 +904,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 12,
   },
+  titleMainRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 4,
+  },
+  platformIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  platformInitial: {
+    fontSize: 16,
+    fontWeight: "800",
+  },
   routeName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "800",
     color: "#F8FAFC",
+    flex: 1,
   },
-  platform: {
+  platformRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  platformLabel: {
     fontSize: 13,
     color: "#64748B",
-    marginTop: 2,
+  },
+  openPlatformBtn: {
+    backgroundColor: "#1E293B",
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  openPlatformText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#3B82F6",
   },
   progressSection: {
     marginHorizontal: 20,

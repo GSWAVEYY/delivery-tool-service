@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import api from "../services/api";
 import type { Package, Route } from "../types";
+import { getPlatformColor, getPlatformInitial } from "../utils/platformColors";
 
 const isWeb = Platform.OS === "web";
 
@@ -251,6 +252,30 @@ export default function ScanScreen() {
           <Text style={styles.subheading}>Look up or add packages to an active route</Text>
         </View>
 
+        {/* Active platform context */}
+        {selectedRouteId &&
+          (() => {
+            const selectedRoute = routes.find((r) => r.id === selectedRouteId);
+            const platformName = selectedRoute?.platformLink?.platform?.name;
+            if (!platformName) return null;
+            const color = getPlatformColor(platformName);
+            const initial = getPlatformInitial(platformName);
+            return (
+              <View
+                style={[
+                  scanContextStyles.banner,
+                  { borderColor: color + "44", backgroundColor: color + "11" },
+                ]}
+              >
+                <View style={[scanContextStyles.iconCircle, { backgroundColor: color + "22" }]}>
+                  <Text style={[scanContextStyles.iconText, { color }]}>{initial}</Text>
+                </View>
+                <Text style={scanContextStyles.label}>Scanning for:</Text>
+                <Text style={[scanContextStyles.platformName, { color }]}>{platformName}</Text>
+              </View>
+            );
+          })()}
+
         {/* Quick Scan Toggle */}
         <View style={styles.section}>
           <View style={quickStyles.toggleRow}>
@@ -479,6 +504,40 @@ export default function ScanScreen() {
     </View>
   );
 }
+
+const scanContextStyles = StyleSheet.create({
+  banner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  iconCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconText: {
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  label: {
+    fontSize: 13,
+    color: "#94A3B8",
+    fontWeight: "500",
+  },
+  platformName: {
+    fontSize: 14,
+    fontWeight: "700",
+  },
+});
 
 const quickStyles = StyleSheet.create({
   toggleRow: {

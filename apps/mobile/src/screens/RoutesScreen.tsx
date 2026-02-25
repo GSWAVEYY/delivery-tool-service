@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import api from "../services/api";
 import type { Route, RouteStatus, PlatformLink } from "../types";
+import { getPlatformColor, getPlatformInitial } from "../utils/platformColors";
 
 const isWeb = Platform.OS === "web";
 
@@ -52,6 +53,9 @@ function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
     day: "numeric",
   });
 
+  const platformName = route.platformLink?.platform?.name;
+  const platformColor = platformName ? getPlatformColor(platformName) : null;
+
   return (
     <TouchableOpacity style={cardStyles.card} onPress={onPress} activeOpacity={0.75}>
       <View style={cardStyles.topRow}>
@@ -60,11 +64,22 @@ function RouteCard({ route, onPress }: { route: Route; onPress: () => void }) {
             {route.name || `Route ${route.id.slice(-6)}`}
           </Text>
           <Text style={cardStyles.date}>{dateLabel}</Text>
-          {route.platformLink && (
-            <Text style={cardStyles.platform}>{route.platformLink.platform?.name}</Text>
-          )}
         </View>
-        <RouteBadge status={route.status} />
+        <View style={cardStyles.rightCol}>
+          {platformName && platformColor && (
+            <View
+              style={[
+                cardStyles.platformPill,
+                { backgroundColor: platformColor + "22", borderColor: platformColor + "55" },
+              ]}
+            >
+              <Text style={[cardStyles.platformPillText, { color: platformColor }]}>
+                {platformName}
+              </Text>
+            </View>
+          )}
+          <RouteBadge status={route.status} />
+        </View>
       </View>
       <View style={cardStyles.stats}>
         <Text style={cardStyles.stat}>
@@ -93,9 +108,21 @@ const cardStyles = StyleSheet.create({
     marginBottom: 8,
   },
   nameCol: { flex: 1, marginRight: 10 },
+  rightCol: { alignItems: "flex-end", gap: 4 },
   name: { fontSize: 16, fontWeight: "700", color: "#F8FAFC" },
   date: { fontSize: 12, color: "#64748B", marginTop: 2 },
-  platform: { fontSize: 12, color: "#475569", marginTop: 1 },
+  platformPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  platformPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
   stats: { flexDirection: "row", alignItems: "center" },
   stat: { fontSize: 13, color: "#94A3B8" },
   dot: { color: "#334155" },
@@ -114,10 +141,27 @@ function CreateRouteForm({
 }) {
   const today = new Date().toISOString().split("T")[0];
   const [name, setName] = useState("");
+  const [nameEdited, setNameEdited] = useState(false);
   const [date, setDate] = useState(today);
   const [notes, setNotes] = useState("");
   const [selectedLinkId, setSelectedLinkId] = useState<string>("");
   const [saving, setSaving] = useState(false);
+
+  const handleSelectPlatform = (linkId: string) => {
+    setSelectedLinkId(linkId);
+    if (!nameEdited) {
+      const link = platformLinks.find((l) => l.id === linkId);
+      if (link) {
+        const platformName = link.displayName || link.platform.name;
+        setName(`${platformName} Route`);
+      }
+    }
+  };
+
+  const handleClearPlatform = () => {
+    setSelectedLinkId("");
+    if (!nameEdited) setName("");
+  };
 
   const submit = async () => {
     if (!name.trim()) {
@@ -146,13 +190,68 @@ function CreateRouteForm({
       <ScrollView style={formStyles.sheet} keyboardShouldPersistTaps="handled">
         <Text style={formStyles.title}>Create Route</Text>
 
+        {platformLinks.length > 0 && (
+          <>
+            <Text style={formStyles.label}>Platform</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={formStyles.platformScroll}
+            >
+              <TouchableOpacity
+                style={[
+                  formStyles.platformChip,
+                  !selectedLinkId && formStyles.platformChipSelected,
+                ]}
+                onPress={handleClearPlatform}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    formStyles.platformChipText,
+                    !selectedLinkId && formStyles.platformChipTextSelected,
+                  ]}
+                >
+                  None
+                </Text>
+              </TouchableOpacity>
+              {platformLinks.map((link) => {
+                const color = getPlatformColor(link.platform.name);
+                const initial = getPlatformInitial(link.platform.name);
+                const selected = selectedLinkId === link.id;
+                return (
+                  <TouchableOpacity
+                    key={link.id}
+                    style={[
+                      formStyles.platformChip,
+                      selected && { borderColor: color, backgroundColor: color + "18" },
+                    ]}
+                    onPress={() => handleSelectPlatform(link.id)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[formStyles.chipIcon, { backgroundColor: color + "30" }]}>
+                      <Text style={[formStyles.chipInitial, { color }]}>{initial}</Text>
+                    </View>
+                    <Text style={[formStyles.platformChipText, selected && { color }]}>
+                      {link.displayName || link.platform.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </>
+        )}
+
         <Text style={formStyles.label}>Route Name *</Text>
         <TextInput
           style={formStyles.input}
-          placeholder="e.g. Morning Run, Zone 4..."
+          placeholder="e.g. Amazon DSP Route, Morning Run..."
           placeholderTextColor="#475569"
           value={name}
-          onChangeText={setName}
+          onChangeText={(v) => {
+            setName(v);
+            setNameEdited(true);
+          }}
         />
 
         <Text style={formStyles.label}>Date</Text>
@@ -163,36 +262,6 @@ function CreateRouteForm({
           value={date}
           onChangeText={setDate}
         />
-
-        {platformLinks.length > 0 && (
-          <>
-            <Text style={formStyles.label}>Platform (optional)</Text>
-            <View style={formStyles.platformList}>
-              <TouchableOpacity
-                style={[formStyles.platformOption, !selectedLinkId && formStyles.platformSelected]}
-                onPress={() => setSelectedLinkId("")}
-                activeOpacity={0.7}
-              >
-                <Text style={formStyles.platformText}>None</Text>
-              </TouchableOpacity>
-              {platformLinks.map((link) => (
-                <TouchableOpacity
-                  key={link.id}
-                  style={[
-                    formStyles.platformOption,
-                    selectedLinkId === link.id && formStyles.platformSelected,
-                  ]}
-                  onPress={() => setSelectedLinkId(link.id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={formStyles.platformText}>
-                    {link.displayName || link.platform.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </>
-        )}
 
         <Text style={formStyles.label}>Notes (optional)</Text>
         <TextInput
@@ -272,27 +341,43 @@ const formStyles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: "top",
   },
-  platformList: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+  platformScroll: {
     gap: 8,
+    paddingBottom: 4,
   },
-  platformOption: {
+  platformChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 9,
+    borderRadius: 20,
     backgroundColor: "#0F172A",
     borderWidth: 1,
     borderColor: "#334155",
   },
-  platformSelected: {
+  platformChipSelected: {
     borderColor: "#3B82F6",
     backgroundColor: "#1E3A5F",
   },
-  platformText: {
+  platformChipText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#CBD5E1",
+    color: "#94A3B8",
+  },
+  platformChipTextSelected: {
+    color: "#3B82F6",
+  },
+  chipIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipInitial: {
+    fontSize: 11,
+    fontWeight: "800",
   },
   actions: {
     flexDirection: "row",

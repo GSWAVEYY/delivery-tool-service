@@ -262,16 +262,31 @@ export default function EarningsScreen() {
       )}
 
       {/* Summary cards */}
-      {summary ? (
+      {summary && summary.allTime.earnings > 0 ? (
         <View style={styles.grid}>
           <StatCard label="Today" data={summary.today} />
           <StatCard label="This Week" data={summary.thisWeek} />
           <StatCard label="This Month" data={summary.thisMonth} />
           <StatCard label="All Time" data={summary.allTime} />
         </View>
-      ) : (
+      ) : loading ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>{loading ? "Loading..." : "No earnings data yet"}</Text>
+          <Text style={styles.emptyText}>Loading...</Text>
+        </View>
+      ) : (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyCardIcon}>💰</Text>
+          <Text style={styles.emptyCardTitle}>No earnings recorded yet</Text>
+          <Text style={styles.emptyCardBody}>
+            Start a shift or log your first delivery to see your earnings here
+          </Text>
+          <TouchableOpacity
+            style={styles.emptyCardBtn}
+            onPress={() => setShowForm(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.emptyCardBtnText}>+ Log Earnings</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -428,5 +443,44 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     color: "#64748B",
+  },
+  emptyCard: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    backgroundColor: "#1E293B",
+    borderRadius: 20,
+    padding: 36,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  emptyCardIcon: {
+    fontSize: 56,
+    marginBottom: 18,
+  },
+  emptyCardTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  emptyCardBody: {
+    fontSize: 15,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 28,
+  },
+  emptyCardBtn: {
+    backgroundColor: "#34D399",
+    borderRadius: 12,
+    paddingVertical: 13,
+    paddingHorizontal: 32,
+  },
+  emptyCardBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#064E3B",
   },
 });

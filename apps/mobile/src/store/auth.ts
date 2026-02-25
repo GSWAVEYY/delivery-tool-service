@@ -45,6 +45,7 @@ interface AuthState {
   token: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  needsOnboarding: boolean;
 
   login: (email: string, password: string) => Promise<void>;
   register: (data: {
@@ -55,6 +56,7 @@ interface AuthState {
   }) => Promise<void>;
   logout: () => Promise<void>;
   loadSession: () => Promise<void>;
+  completeOnboarding: () => void;
 }
 
 const TOKEN_KEY = "deliverybridge_token";
@@ -64,19 +66,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   token: null,
   isLoading: true,
   isAuthenticated: false,
+  needsOnboarding: false,
 
   login: async (email, password) => {
     const { user, token } = await api.login({ email, password });
     api.setToken(token);
     await tokenStorage.set(TOKEN_KEY, token);
-    set({ user, token, isAuthenticated: true });
+    set({ user, token, isAuthenticated: true, needsOnboarding: false });
   },
 
   register: async (data) => {
     const { user, token } = await api.register(data);
     api.setToken(token);
     await tokenStorage.set(TOKEN_KEY, token);
-    set({ user, token, isAuthenticated: true });
+    set({ user, token, isAuthenticated: true, needsOnboarding: true });
   },
 
   logout: async () => {
@@ -87,7 +90,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     api.setToken(null);
     await tokenStorage.remove(TOKEN_KEY);
-    set({ user: null, token: null, isAuthenticated: false });
+    set({ user: null, token: null, isAuthenticated: false, needsOnboarding: false });
   },
 
   loadSession: async () => {
@@ -96,12 +99,16 @@ export const useAuthStore = create<AuthState>((set) => ({
       if (token) {
         api.setToken(token);
         const { user } = await api.getMe();
-        set({ user, token, isAuthenticated: true, isLoading: false });
+        set({ user, token, isAuthenticated: true, isLoading: false, needsOnboarding: false });
         return;
       }
     } catch {
       await tokenStorage.remove(TOKEN_KEY);
     }
     set({ isLoading: false });
+  },
+
+  completeOnboarding: () => {
+    set({ needsOnboarding: false });
   },
 }));

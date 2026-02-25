@@ -7,13 +7,15 @@ import RegisterScreen from "../screens/RegisterScreen";
 import EarningsScreen from "../screens/EarningsScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import AddPlatformScreen from "../screens/AddPlatformScreen";
+import OnboardingScreen from "../screens/OnboardingScreen";
 
 type AuthScreen = "login" | "register";
 type AppTab = "dashboard" | "earnings" | "profile";
 type Overlay = "addPlatform" | null;
 
 export default function AppNavigator() {
-  const { isAuthenticated, isLoading, loadSession } = useAuthStore();
+  const { isAuthenticated, isLoading, loadSession, needsOnboarding, completeOnboarding } =
+    useAuthStore();
   const [authScreen, setAuthScreen] = useState<AuthScreen>("login");
   const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
   const [overlay, setOverlay] = useState<Overlay>(null);
@@ -37,6 +39,11 @@ export default function AppNavigator() {
       return <RegisterScreen onNavigateLogin={() => setAuthScreen("login")} />;
     }
     return <LoginScreen onNavigateRegister={() => setAuthScreen("register")} />;
+  }
+
+  // Onboarding flow — shown after first registration
+  if (isAuthenticated && needsOnboarding) {
+    return <OnboardingScreen onComplete={completeOnboarding} />;
   }
 
   // Overlay screens (full screen over tabs)

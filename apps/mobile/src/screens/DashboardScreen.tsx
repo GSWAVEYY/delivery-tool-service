@@ -37,7 +37,6 @@ const isWeb = Platform.OS === "web";
 // On native, Alert.prompt exists. On web we use window.prompt.
 function webPrompt(msg: string, defaultVal = ""): string | null {
   if (isWeb) {
-     
     return (window as Window).prompt(msg, defaultVal);
   }
   return null;
@@ -402,7 +401,7 @@ export default function DashboardScreen({ onAddPlatform }: Props) {
         )}
 
         {/* Earnings Summary Card */}
-        {data?.earningsSummary && (
+        {data?.earningsSummary && data.earningsSummary.last7Days > 0 ? (
           <View style={styles.earningsCard}>
             <Text style={styles.earningsTitle}>Last 7 Days</Text>
             <Text style={styles.earningsAmount}>${data.earningsSummary.last7Days.toFixed(2)}</Text>
@@ -412,6 +411,14 @@ export default function DashboardScreen({ onAddPlatform }: Props) {
               </Text>
             )}
           </View>
+        ) : (
+          data && (
+            <View style={styles.earningsEmptyCard}>
+              <Text style={styles.earningsEmptyIcon}>💳</Text>
+              <Text style={styles.earningsEmptyTitle}>No earnings yet</Text>
+              <Text style={styles.earningsEmptyBody}>Start a shift to begin tracking earnings</Text>
+            </View>
+          )
         )}
 
         {/* Today's Shifts */}
@@ -474,10 +481,20 @@ export default function DashboardScreen({ onAddPlatform }: Props) {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No platforms linked yet.</Text>
+              <Text style={styles.emptyIcon}>📦</Text>
+              <Text style={styles.emptyText}>No platforms yet</Text>
               <Text style={styles.emptySubtext}>
-                Tap the + button to add your delivery platforms.
+                Add your delivery apps to start tracking shifts and earnings
               </Text>
+              {onAddPlatform && (
+                <TouchableOpacity
+                  style={styles.emptyBtn}
+                  onPress={onAddPlatform}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.emptyBtnText}>+ Add Platforms</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
         </View>
@@ -853,18 +870,61 @@ const styles = StyleSheet.create({
   emptyState: {
     backgroundColor: "#1E293B",
     borderRadius: 16,
-    padding: 32,
+    padding: 36,
     alignItems: "center",
   },
+  emptyIcon: {
+    fontSize: 48,
+    marginBottom: 14,
+  },
   emptyText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#94A3B8",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 8,
   },
   emptySubtext: {
     fontSize: 14,
+    color: "#94A3B8",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  emptyBtn: {
+    backgroundColor: "#3B82F6",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+  },
+  emptyBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  earningsEmptyCard: {
+    marginHorizontal: 20,
+    backgroundColor: "#1E293B",
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderStyle: "dashed",
+  },
+  earningsEmptyIcon: {
+    fontSize: 32,
+    marginBottom: 10,
+  },
+  earningsEmptyTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#94A3B8",
+    marginBottom: 4,
+  },
+  earningsEmptyBody: {
+    fontSize: 13,
     color: "#64748B",
-    marginTop: 8,
     textAlign: "center",
   },
   notifBanner: {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -8,6 +8,8 @@ import {
   StyleSheet,
   Platform,
   ActivityIndicator,
+  Switch,
+  Animated,
 } from "react-native";
 import api from "../services/api";
 import type { Package, Route } from "../types";
@@ -16,6 +18,14 @@ const isWeb = Platform.OS === "web";
 
 interface RecentScan extends Package {
   scannedLocal: string;
+  isNew?: boolean;
+  isError?: boolean;
+}
+
+interface SessionStats {
+  scanned: number;
+  newPackages: number;
+  errors: number;
 }
 
 function PackageStatusBadge({ status }: { status: string }) {
@@ -36,6 +46,58 @@ const badgeStyles = StyleSheet.create({
   text: { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
 });
 
+// ─── Flash overlay component ──────────────────────────────
+
+function FlashFeedback({ type }: { type: "success" | "error" | null }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!type) return;
+    opacity.setValue(1);
+    Animated.timing(opacity, {
+      toValue: 0,
+      duration: 700,
+      useNativeDriver: true,
+    }).start();
+  }, [type]);
+
+  if (!type) return null;
+  return (
+    <Animated.View
+      style={[
+        flashStyles.overlay,
+        {
+          opacity,
+          backgroundColor: type === "success" ? "rgba(52,211,153,0.15)" : "rgba(239,68,68,0.15)",
+        },
+      ]}
+      pointerEvents="none"
+    >
+      <Text style={[flashStyles.icon, { color: type === "success" ? "#34D399" : "#EF4444" }]}>
+        {type === "success" ? "✓" : "✗"}
+      </Text>
+    </Animated.View>
+  );
+}
+
+const flashStyles = StyleSheet.create({
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 50,
+    borderRadius: 12,
+  },
+  icon: {
+    fontSize: 48,
+    fontWeight: "900",
+  },
+});
+
 export default function ScanScreen() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string>("");
@@ -48,6 +110,18 @@ export default function ScanScreen() {
   const [trackingNum, setTrackingNum] = useState("");
   const [barcode, setBarcode] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Quick scan mode
+  const [quickScanMode, setQuickScanMode] = useState(false);
+  const [flashType, setFlashType] = useState<"success" | "error" | null>(null);
+  const [flashKey, setFlashKey] = useState(0);
+  const [borderColor, setBorderColor] = useState("#334155");
+  const [sessionStats, setSessionStats] = useState<SessionStats>({
+    scanned: 0,
+    newPackages: 0,
+    errors: 0,
+  });
+  const scanInputRef = useRef<TextInput>(null);
 
   const loadActiveRoutes = useCallback(async () => {
     try {
@@ -64,6 +138,20 @@ export default function ScanScreen() {
     loadActiveRoutes();
   }, [loadActiveRoutes]);
 
+  // Auto-focus on quick scan mode enable
+  useEffect(() => {
+    if (quickScanMode && scanInputRef.current) {
+      setTimeout(() => scanInputRef.current?.focus(), 100);
+    }
+  }, [quickScanMode]);
+
+  const triggerFlash = (type: "success" | "error") => {
+    setFlashType(type);
+    setFlashKey((k) => k + 1);
+    setBorderColor(type === "success" ? "#34D399" : "#EF4444");
+    setTimeout(() => setBorderColor("#334155"), 800);
+  };
+
   const handleScan = async () => {
     if (!scanInput.trim()) return;
     if (!selectedRouteId) {
@@ -76,12 +164,43 @@ export default function ScanScreen() {
       const result = await api.scanPackage(selectedRouteId, scanInput.trim());
       const pkg = result.package;
       setRecentScans((prev) =>
-        [{ ...pkg, scannedLocal: new Date().toISOString() }, ...prev].slice(0, 10),
+        [{ ...pkg, scannedLocal: new Date().toISOString(), isNew: false }, ...prev].slice(0, 20),
       );
       setScanInput("");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Package not found";
-      if (isWeb) window.alert(msg);
+      if (quickScanMode) {
+        triggerFlash("success");
+        setSessionStats((s) => ({ ...s, scanned: s.scanned + 1 }));
+        setTimeout(() => scanInputRef.current?.focus(), 50);
+      }
+    } catch {
+      if (quickScanMode) {
+        // auto-create the package
+        try {
+          const created = await api.addPackage(selectedRouteId, {
+            trackingNumber: scanInput.trim(),
+          });
+          const pkg = created.package;
+          setRecentScans((prev) =>
+            [{ ...pkg, scannedLocal: new Date().toISOString(), isNew: true }, ...prev].slice(0, 20),
+          );
+          setScanInput("");
+          triggerFlash("success");
+          setSessionStats((s) => ({
+            ...s,
+            scanned: s.scanned + 1,
+            newPackages: s.newPackages + 1,
+          }));
+          setTimeout(() => scanInputRef.current?.focus(), 50);
+        } catch {
+          triggerFlash("error");
+          setSessionStats((s) => ({ ...s, errors: s.errors + 1 }));
+          setScanInput("");
+          setTimeout(() => scanInputRef.current?.focus(), 50);
+        }
+      } else {
+        const errMsg = "Package not found";
+        if (isWeb) window.alert(errMsg);
+      }
     } finally {
       setScanning(false);
     }
@@ -105,7 +224,7 @@ export default function ScanScreen() {
       });
       const pkg = result.package;
       setRecentScans((prev) =>
-        [{ ...pkg, scannedLocal: new Date().toISOString() }, ...prev].slice(0, 10),
+        [{ ...pkg, scannedLocal: new Date().toISOString() }, ...prev].slice(0, 20),
       );
       setTrackingNum("");
       setBarcode("");
@@ -118,6 +237,11 @@ export default function ScanScreen() {
     }
   };
 
+  const resetSession = () => {
+    setSessionStats({ scanned: 0, newPackages: 0, errors: 0 });
+    setRecentScans([]);
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -126,6 +250,53 @@ export default function ScanScreen() {
           <Text style={styles.heading}>Scan Package</Text>
           <Text style={styles.subheading}>Look up or add packages to an active route</Text>
         </View>
+
+        {/* Quick Scan Toggle */}
+        <View style={styles.section}>
+          <View style={quickStyles.toggleRow}>
+            <View style={quickStyles.toggleInfo}>
+              <Text style={quickStyles.toggleLabel}>Quick Scan Mode</Text>
+              <Text style={quickStyles.toggleSub}>Auto-create on miss, rapid load</Text>
+            </View>
+            <Switch
+              value={quickScanMode}
+              onValueChange={setQuickScanMode}
+              trackColor={{ false: "#334155", true: "#1E3A5F" }}
+              thumbColor={quickScanMode ? "#3B82F6" : "#64748B"}
+            />
+          </View>
+        </View>
+
+        {/* Session stats */}
+        {(quickScanMode || sessionStats.scanned > 0) && (
+          <View style={styles.section}>
+            <View style={quickStyles.statsRow}>
+              <View style={quickStyles.statBox}>
+                <Text style={quickStyles.statNum}>{sessionStats.scanned}</Text>
+                <Text style={quickStyles.statLabel}>Scanned</Text>
+              </View>
+              <View style={[quickStyles.statBox, { borderColor: "#34D399" }]}>
+                <Text style={[quickStyles.statNum, { color: "#34D399" }]}>
+                  {sessionStats.newPackages}
+                </Text>
+                <Text style={quickStyles.statLabel}>New</Text>
+              </View>
+              <View style={[quickStyles.statBox, { borderColor: "#EF4444" }]}>
+                <Text style={[quickStyles.statNum, { color: "#EF4444" }]}>
+                  {sessionStats.errors}
+                </Text>
+                <Text style={quickStyles.statLabel}>Errors</Text>
+              </View>
+              <TouchableOpacity
+                style={quickStyles.resetBtn}
+                onPress={resetSession}
+                activeOpacity={0.7}
+              >
+                <Text style={quickStyles.resetText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {/* Route selector */}
         <View style={styles.section}>
@@ -163,100 +334,137 @@ export default function ScanScreen() {
 
         {/* Scan input */}
         <View style={styles.section}>
-          <Text style={styles.label}>Barcode / Tracking Number</Text>
-          <View style={styles.scanRow}>
-            <TextInput
-              style={styles.scanInput}
-              placeholder="Enter or scan barcode..."
-              placeholderTextColor="#475569"
-              value={scanInput}
-              onChangeText={setScanInput}
-              onSubmitEditing={handleScan}
-              returnKeyType="search"
-              autoCapitalize="characters"
-            />
-            <TouchableOpacity
-              style={[styles.scanBtn, (scanning || !scanInput.trim()) && styles.disabled]}
-              onPress={handleScan}
-              disabled={scanning || !scanInput.trim()}
-              activeOpacity={0.8}
-            >
-              {scanning ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.scanBtnText}>Scan</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Quick add */}
-        <View style={styles.section}>
-          {!showAddForm ? (
-            <TouchableOpacity
-              style={styles.addToggle}
-              onPress={() => setShowAddForm(true)}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.addToggleText}>+ Add New Package</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.addForm}>
-              <Text style={styles.addFormTitle}>Add Package</Text>
+          <Text style={styles.label}>
+            {quickScanMode ? "Quick Scan — Enter Barcode" : "Barcode / Tracking Number"}
+          </Text>
+          <View style={quickStyles.scanWrapper}>
+            <View style={[styles.scanRow, { position: "relative" }]}>
               <TextInput
-                style={styles.input}
-                placeholder="Tracking Number *"
+                ref={scanInputRef}
+                style={[styles.scanInput, { borderColor }]}
+                placeholder="Enter or scan barcode..."
                 placeholderTextColor="#475569"
-                value={trackingNum}
-                onChangeText={setTrackingNum}
+                value={scanInput}
+                onChangeText={setScanInput}
+                onSubmitEditing={handleScan}
+                returnKeyType="search"
                 autoCapitalize="characters"
+                autoFocus={quickScanMode}
               />
-              <TextInput
-                style={styles.input}
-                placeholder="Barcode (optional)"
-                placeholderTextColor="#475569"
-                value={barcode}
-                onChangeText={setBarcode}
-              />
-              <View style={styles.addFormActions}>
-                <TouchableOpacity
-                  style={styles.cancelBtn}
-                  onPress={() => {
-                    setShowAddForm(false);
-                    setTrackingNum("");
-                    setBarcode("");
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.cancelText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.submitBtn, adding && styles.disabled]}
-                  onPress={handleAddPackage}
-                  disabled={adding}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.submitText}>{adding ? "Adding..." : "Add Package"}</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[styles.scanBtn, (scanning || !scanInput.trim()) && styles.disabled]}
+                onPress={handleScan}
+                disabled={scanning || !scanInput.trim()}
+                activeOpacity={0.8}
+              >
+                {scanning ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <Text style={styles.scanBtnText}>{quickScanMode ? "Go" : "Scan"}</Text>
+                )}
+              </TouchableOpacity>
             </View>
+            {/* Flash feedback layered over the input area */}
+            <FlashFeedback key={flashKey} type={flashType} />
+          </View>
+          {quickScanMode && (
+            <Text style={quickStyles.quickHint}>
+              Quick Scan: auto-creates packages not found in route
+            </Text>
           )}
         </View>
+
+        {/* Quick scan counter */}
+        {quickScanMode && sessionStats.scanned > 0 && (
+          <View style={styles.section}>
+            <View style={quickStyles.counterBox}>
+              <Text style={quickStyles.counterText}>
+                Quick scanned: {sessionStats.scanned} package{sessionStats.scanned !== 1 ? "s" : ""}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Quick add */}
+        {!quickScanMode && (
+          <View style={styles.section}>
+            {!showAddForm ? (
+              <TouchableOpacity
+                style={styles.addToggle}
+                onPress={() => setShowAddForm(true)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.addToggleText}>+ Add New Package</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.addForm}>
+                <Text style={styles.addFormTitle}>Add Package</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Tracking Number *"
+                  placeholderTextColor="#475569"
+                  value={trackingNum}
+                  onChangeText={setTrackingNum}
+                  autoCapitalize="characters"
+                />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Barcode (optional)"
+                  placeholderTextColor="#475569"
+                  value={barcode}
+                  onChangeText={setBarcode}
+                />
+                <View style={styles.addFormActions}>
+                  <TouchableOpacity
+                    style={styles.cancelBtn}
+                    onPress={() => {
+                      setShowAddForm(false);
+                      setTrackingNum("");
+                      setBarcode("");
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.cancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.submitBtn, adding && styles.disabled]}
+                    onPress={handleAddPackage}
+                    disabled={adding}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.submitText}>{adding ? "Adding..." : "Add Package"}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        )}
 
         {/* Recent scans */}
         {recentScans.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.label}>Recent Scans</Text>
             {recentScans.map((pkg) => (
-              <View key={`${pkg.id}-${pkg.scannedLocal}`} style={styles.scanRecord}>
+              <View
+                key={`${pkg.id}-${pkg.scannedLocal}`}
+                style={[
+                  styles.scanRecord,
+                  pkg.isNew && quickStyles.newRecord,
+                  pkg.isError && quickStyles.errorRecord,
+                ]}
+              >
                 <View style={styles.scanRecordLeft}>
-                  <Text style={styles.scanTracking} numberOfLines={1}>
-                    {pkg.trackingNumber}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Text style={styles.scanTracking} numberOfLines={1}>
+                      {pkg.trackingNumber}
+                    </Text>
+                    {pkg.isNew && <Text style={quickStyles.newBadge}>NEW</Text>}
+                  </View>
                   <Text style={styles.scanTime}>
                     {new Date(pkg.scannedLocal).toLocaleTimeString([], {
                       hour: "2-digit",
                       minute: "2-digit",
+                      second: "2-digit",
                     })}
                   </Text>
                 </View>
@@ -271,6 +479,111 @@ export default function ScanScreen() {
     </View>
   );
 }
+
+const quickStyles = StyleSheet.create({
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#1E293B",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  toggleInfo: {
+    flex: 1,
+  },
+  toggleLabel: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#F8FAFC",
+  },
+  toggleSub: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+  },
+  statBox: {
+    flex: 1,
+    backgroundColor: "#1E293B",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  statNum: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#F8FAFC",
+  },
+  statLabel: {
+    fontSize: 10,
+    color: "#64748B",
+    textTransform: "uppercase",
+    fontWeight: "700",
+    marginTop: 2,
+  },
+  resetBtn: {
+    backgroundColor: "#0F172A",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  resetText: {
+    fontSize: 12,
+    color: "#94A3B8",
+    fontWeight: "600",
+  },
+  scanWrapper: {
+    position: "relative",
+  },
+  quickHint: {
+    fontSize: 11,
+    color: "#3B82F6",
+    marginTop: 6,
+    fontWeight: "500",
+  },
+  counterBox: {
+    backgroundColor: "#064E3B",
+    borderRadius: 10,
+    padding: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#065F46",
+  },
+  counterText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#34D399",
+  },
+  newRecord: {
+    borderColor: "#34D399",
+    borderWidth: 1,
+  },
+  errorRecord: {
+    borderColor: "#EF4444",
+    borderWidth: 1,
+  },
+  newBadge: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#34D399",
+    backgroundColor: "#064E3B",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    textTransform: "uppercase",
+  },
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -465,6 +778,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
   scanRecordLeft: {
     flex: 1,

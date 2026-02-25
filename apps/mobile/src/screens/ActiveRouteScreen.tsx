@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   Text,
@@ -8,15 +8,33 @@ import {
   Platform,
   TextInput,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import api from "../services/api";
 import type { RouteDetail, Stop, StopStatus } from "../types";
 
 const isWeb = Platform.OS === "web";
 
-interface Props {
-  routeId: string;
-  onBack: () => void;
+// ─── Navigation helper ────────────────────────────────────
+
+function buildMapsUrl(stop: Stop): string {
+  const fullAddress = [stop.address, stop.city, stop.state, stop.zipCode]
+    .filter(Boolean)
+    .join(", ")
+    .trim();
+  return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(fullAddress)}`;
+}
+
+function navigateTo(stop: Stop) {
+  const url = buildMapsUrl(stop);
+  if (isWeb) {
+    window.open(url, "_blank");
+  } else {
+    Linking.openURL(url).catch(() => {
+      // fallback — open browser
+      Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(stop.address)}`);
+    });
+  }
 }
 
 // ─── Status Badge ────────────────────────────────────────
@@ -102,6 +120,15 @@ function StopCard({
               ))}
             </View>
           )}
+
+          {/* Navigate button */}
+          <TouchableOpacity
+            style={stopStyles.navBtn}
+            onPress={() => navigateTo(stop)}
+            activeOpacity={0.8}
+          >
+            <Text style={stopStyles.navBtnText}>Navigate</Text>
+          </TouchableOpacity>
 
           {stop.status !== "COMPLETED" && stop.status !== "SKIPPED" && (
             <View style={stopStyles.actions}>
@@ -196,9 +223,9 @@ const stopStyles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "#334155",
     paddingTop: 12,
+    gap: 10,
   },
   pkgList: {
-    marginBottom: 12,
     gap: 6,
   },
   pkgRow: {
@@ -220,6 +247,20 @@ const stopStyles = StyleSheet.create({
     fontSize: 11,
     color: "#64748B",
     textTransform: "uppercase",
+  },
+  navBtn: {
+    backgroundColor: "#1E3A5F",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignSelf: "flex-start",
+    borderWidth: 1,
+    borderColor: "#3B82F6",
+  },
+  navBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#3B82F6",
   },
   actions: {
     flexDirection: "row",
@@ -319,6 +360,125 @@ function AddStopForm({
   );
 }
 
+// ─── Bulk Import Form ─────────────────────────────────────
+
+interface ParsedStop {
+  address: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
+function parseAddressLine(line: string): ParsedStop {
+  const parts = line.split(",").map((p) => p.trim());
+  if (parts.length === 1) {
+    return { address: parts[0] };
+  }
+  const streetAddress = parts[0];
+  const city = parts.length >= 2 ? parts[1] : undefined;
+  const lastPart = parts[parts.length - 1];
+  const stateZipMatch = lastPart.match(/([A-Za-z]{2})\s*(\d{5})/);
+  let state: string | undefined;
+  let zipCode: string | undefined;
+  if (stateZipMatch) {
+    state = stateZipMatch[1].toUpperCase();
+    zipCode = stateZipMatch[2];
+  }
+  return { address: streetAddress, city, state, zipCode };
+}
+
+function BulkImportForm({
+  onImport,
+  onCancel,
+}: {
+  onImport: (stops: ParsedStop[]) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [text, setText] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  const handleImport = async () => {
+    if (lines.length === 0) {
+      if (isWeb) window.alert("Paste at least one address");
+      return;
+    }
+    const parsed = lines.map(parseAddressLine);
+    setImporting(true);
+    setProgress(`Importing 0/${parsed.length} stops...`);
+    // We pass them all in one bulk call
+    setProgress(`Importing ${parsed.length}/${parsed.length} stops...`);
+    await onImport(parsed);
+    setImporting(false);
+    setProgress(null);
+  };
+
+  return (
+    <View style={formStyles.overlay}>
+      <View style={formStyles.card}>
+        <Text style={formStyles.title}>Import Stops</Text>
+        <TextInput
+          style={[formStyles.input, bulkStyles.textarea]}
+          placeholder={
+            "Paste addresses, one per line\n\n123 Main St, City, ST 12345\n456 Oak Ave, City, ST 67890"
+          }
+          placeholderTextColor="#475569"
+          value={text}
+          onChangeText={setText}
+          multiline
+          numberOfLines={8}
+          textAlignVertical="top"
+        />
+        {lines.length > 0 && (
+          <Text style={bulkStyles.lineCount}>{lines.length} address(es) detected</Text>
+        )}
+        {progress && <Text style={bulkStyles.progressText}>{progress}</Text>}
+        <View style={formStyles.btnRow}>
+          <TouchableOpacity style={formStyles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
+            <Text style={formStyles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[formStyles.submitBtn, (importing || lines.length === 0) && formStyles.disabled]}
+            onPress={handleImport}
+            disabled={importing || lines.length === 0}
+            activeOpacity={0.8}
+          >
+            <Text style={formStyles.submitText}>
+              {importing
+                ? (progress ?? "Importing...")
+                : `Import ${lines.length} Stop${lines.length !== 1 ? "s" : ""}`}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const bulkStyles = StyleSheet.create({
+  textarea: {
+    minHeight: 160,
+    textAlignVertical: "top",
+  },
+  lineCount: {
+    fontSize: 12,
+    color: "#3B82F6",
+    fontWeight: "600",
+    marginTop: -4,
+  },
+  progressText: {
+    fontSize: 13,
+    color: "#F59E0B",
+    fontWeight: "600",
+    textAlign: "center",
+  },
+});
+
 const formStyles = StyleSheet.create({
   overlay: {
     position: "absolute",
@@ -393,10 +553,17 @@ const formStyles = StyleSheet.create({
 
 // ─── ActiveRouteScreen ────────────────────────────────────
 
-export default function ActiveRouteScreen({ routeId, onBack }: Props) {
+export default function ActiveRouteScreen({
+  routeId,
+  onBack,
+}: {
+  routeId: string;
+  onBack: () => void;
+}) {
   const [route, setRoute] = useState<RouteDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showAddStop, setShowAddStop] = useState(false);
+  const [showBulkImport, setShowBulkImport] = useState(false);
   const [completing, setCompleting] = useState(false);
 
   const load = useCallback(async () => {
@@ -441,8 +608,19 @@ export default function ActiveRouteScreen({ routeId, onBack }: Props) {
     }
   };
 
+  const handleBulkImport = async (stops: ParsedStop[]) => {
+    try {
+      await api.bulkAddStops(routeId, stops);
+      setShowBulkImport(false);
+      await load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to import stops";
+      if (isWeb) window.alert(msg);
+    }
+  };
+
   const handleCompleteRoute = async () => {
-    const ok = isWeb ? window.confirm("Mark this route as completed?") : true; // On native would use Alert — simplified for now
+    const ok = isWeb ? window.confirm("Mark this route as completed?") : true;
     if (!ok) return;
     setCompleting(true);
     try {
@@ -456,10 +634,28 @@ export default function ActiveRouteScreen({ routeId, onBack }: Props) {
     }
   };
 
+  const handleNavigateNext = () => {
+    if (!route) return;
+    const sorted = route.stops.slice().sort((a, b) => a.sequence - b.sequence);
+    const next = sorted.find((s) => s.status === "PENDING" || s.status === "ARRIVED");
+    if (next) {
+      navigateTo(next);
+    } else {
+      if (isWeb) window.alert("No pending stops remaining");
+    }
+  };
+
   const allDone =
     route &&
     route.stops.length > 0 &&
     route.stops.every((s) => s.status === "COMPLETED" || s.status === "SKIPPED");
+
+  const nextStop = route
+    ? route.stops
+        .slice()
+        .sort((a, b) => a.sequence - b.sequence)
+        .find((s) => s.status === "PENDING" || s.status === "ARRIVED")
+    : null;
 
   if (loading) {
     return (
@@ -490,8 +686,19 @@ export default function ActiveRouteScreen({ routeId, onBack }: Props) {
         <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
           <Text style={styles.backArrow}>← Back</Text>
         </TouchableOpacity>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerStatus}>{route.status.replace(/_/g, " ")}</Text>
+        <View style={styles.headerRight}>
+          {nextStop && (
+            <TouchableOpacity
+              style={styles.navigateNextBtn}
+              onPress={handleNavigateNext}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.navigateNextText}>Navigate to Next</Text>
+            </TouchableOpacity>
+          )}
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerStatus}>{route.status.replace(/_/g, " ")}</Text>
+          </View>
         </View>
       </View>
 
@@ -537,13 +744,22 @@ export default function ActiveRouteScreen({ routeId, onBack }: Props) {
 
       {/* Bottom actions */}
       <View style={styles.bottomBar}>
-        <TouchableOpacity
-          style={styles.addStopBtn}
-          onPress={() => setShowAddStop(true)}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.addStopText}>+ Add Stop</Text>
-        </TouchableOpacity>
+        <View style={styles.addBtnRow}>
+          <TouchableOpacity
+            style={[styles.addStopBtn, { flex: 1 }]}
+            onPress={() => setShowAddStop(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.addStopText}>+ Add Stop</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.importBtn}
+            onPress={() => setShowBulkImport(true)}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.importBtnText}>Import Stops</Text>
+          </TouchableOpacity>
+        </View>
 
         {allDone && (
           <TouchableOpacity
@@ -560,6 +776,9 @@ export default function ActiveRouteScreen({ routeId, onBack }: Props) {
       </View>
 
       {showAddStop && <AddStopForm onAdd={handleAddStop} onCancel={() => setShowAddStop(false)} />}
+      {showBulkImport && (
+        <BulkImportForm onImport={handleBulkImport} onCancel={() => setShowBulkImport(false)} />
+      )}
     </View>
   );
 }
@@ -593,6 +812,11 @@ const styles = StyleSheet.create({
     paddingTop: 56,
     paddingBottom: 8,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   backBtn: {
     paddingVertical: 6,
     paddingRight: 16,
@@ -614,6 +838,19 @@ const styles = StyleSheet.create({
     color: "#34D399",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  navigateNextBtn: {
+    backgroundColor: "#1E3A5F",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "#3B82F6",
+  },
+  navigateNextText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#3B82F6",
   },
   titleRow: {
     paddingHorizontal: 20,
@@ -684,6 +921,10 @@ const styles = StyleSheet.create({
     borderTopColor: "#1E293B",
     gap: 10,
   },
+  addBtnRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
   addStopBtn: {
     borderWidth: 1,
     borderColor: "#334155",
@@ -695,6 +936,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     color: "#94A3B8",
+  },
+  importBtn: {
+    backgroundColor: "#1E293B",
+    borderWidth: 1,
+    borderColor: "#3B82F6",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  importBtnText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#3B82F6",
   },
   completeBtn: {
     backgroundColor: "#34D399",

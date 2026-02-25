@@ -263,4 +263,69 @@ router.patch(
   }),
 );
 
+// ─── POST /api/routes/:id/stops/bulk — bulk create stops ─────
+
+const bulkStopsSchema = z.object({
+  stops: z
+    .array(
+      z.object({
+        address: z.string().min(1),
+        city: z.string().optional(),
+        state: z.string().optional(),
+        zipCode: z.string().optional(),
+      }),
+    )
+    .min(1),
+});
+
+router.post(
+  "/:id/stops/bulk",
+  validate(bulkStopsSchema),
+  asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.userId;
+    const id = req.params.id as string;
+
+    const route = await prisma.route.findFirst({ where: { id, userId } });
+    if (!route) throw AppError.notFound("Route not found");
+
+    const maxStop = await prisma.stop.findFirst({
+      where: { routeId: id },
+      orderBy: { sequence: "desc" },
+      select: { sequence: true },
+    });
+    const baseSequence = (maxStop?.sequence ?? 0) + 1;
+
+    const stopsInput = req.body.stops as Array<{
+      address: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+    }>;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const created = await Promise.all(
+        stopsInput.map((s, i) =>
+          tx.stop.create({
+            data: {
+              routeId: id,
+              address: s.address,
+              city: s.city,
+              state: s.state,
+              zipCode: s.zipCode,
+              sequence: baseSequence + i,
+            },
+          }),
+        ),
+      );
+      await tx.route.update({
+        where: { id },
+        data: { totalStops: { increment: stopsInput.length } },
+      });
+      return created;
+    });
+
+    res.status(201).json({ stops: result, count: result.length });
+  }),
+);
+
 export default router;

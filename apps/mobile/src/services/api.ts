@@ -213,6 +213,16 @@ class ApiClient {
     });
   }
 
+  async bulkAddStops(
+    routeId: string,
+    stops: Array<{ address: string; city?: string; state?: string; zipCode?: string }>,
+  ): Promise<{ stops: Stop[]; count: number }> {
+    return this.request(`/routes/${routeId}/stops/bulk`, {
+      method: "POST",
+      body: JSON.stringify({ stops }),
+    });
+  }
+
   // ─── Packages ───────────────────────────────────────────
 
   async addPackage(

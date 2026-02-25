@@ -90,3 +90,74 @@ export interface PlatformLaunchData {
   androidPackage?: string;
   iosScheme?: string;
 }
+
+// ─── Delivery Ops ────────────────────────────────────────
+
+export type RouteStatus = "ASSIGNED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type StopStatus = "PENDING" | "ARRIVED" | "COMPLETED" | "SKIPPED" | "ATTEMPTED";
+export type PackageStatus =
+  | "PENDING"
+  | "SCANNED_IN"
+  | "OUT_FOR_DELIVERY"
+  | "DELIVERED"
+  | "RETURNED"
+  | "DAMAGED";
+
+export interface Route {
+  id: string;
+  platformLinkId?: string;
+  date: string;
+  status: RouteStatus;
+  name?: string;
+  totalStops: number;
+  completedStops: number;
+  totalPackages: number;
+  deliveredPackages: number;
+  startedAt?: string;
+  completedAt?: string;
+  notes?: string;
+  platformLink?: PlatformLink;
+}
+
+export interface RouteDetail extends Route {
+  stops: Stop[];
+}
+
+export interface Stop {
+  id: string;
+  routeId: string;
+  address: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  sequence: number;
+  status: StopStatus;
+  arrivedAt?: string;
+  completedAt?: string;
+  notes?: string;
+  packages: Package[];
+}
+
+export interface Package {
+  id: string;
+  routeId: string;
+  stopId?: string;
+  trackingNumber: string;
+  barcode?: string;
+  status: PackageStatus;
+  scannedAt?: string;
+  deliveredAt?: string;
+  recipientName?: string;
+  notes?: string;
+}
+
+export interface TodayData {
+  todayRoutes: Route[];
+  stats: {
+    totalStops: number;
+    completedStops: number;
+    totalPackages: number;
+    deliveredPackages: number;
+    activeRoutes: number;
+  };
+}

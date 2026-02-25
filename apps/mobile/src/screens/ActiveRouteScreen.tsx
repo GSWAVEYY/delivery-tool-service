@@ -1,0 +1,711 @@
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  Platform,
+  TextInput,
+  ActivityIndicator,
+} from "react-native";
+import api from "../services/api";
+import type { RouteDetail, Stop, StopStatus } from "../types";
+
+const isWeb = Platform.OS === "web";
+
+interface Props {
+  routeId: string;
+  onBack: () => void;
+}
+
+// ─── Status Badge ────────────────────────────────────────
+
+function StopStatusBadge({ status }: { status: StopStatus }) {
+  const colors: Record<StopStatus, { bg: string; text: string }> = {
+    PENDING: { bg: "#1E293B", text: "#94A3B8" },
+    ARRIVED: { bg: "#451A03", text: "#F59E0B" },
+    COMPLETED: { bg: "#064E3B", text: "#34D399" },
+    SKIPPED: { bg: "#450A0A", text: "#EF4444" },
+    ATTEMPTED: { bg: "#312E81", text: "#A5B4FC" },
+  };
+  const c = colors[status] || colors.PENDING;
+  return (
+    <View style={[badgeStyles.badge, { backgroundColor: c.bg }]}>
+      <Text style={[badgeStyles.text, { color: c.text }]}>{status}</Text>
+    </View>
+  );
+}
+
+const badgeStyles = StyleSheet.create({
+  badge: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 7 },
+  text: { fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+});
+
+// ─── Stop Card ────────────────────────────────────────────
+
+function StopCard({
+  stop,
+  onUpdateStatus,
+}: {
+  stop: Stop;
+  onUpdateStatus: (stopId: string, status: StopStatus) => Promise<void>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [updating, setUpdating] = useState(false);
+
+  const update = async (status: StopStatus) => {
+    setUpdating(true);
+    await onUpdateStatus(stop.id, status);
+    setUpdating(false);
+  };
+
+  return (
+    <TouchableOpacity
+      style={stopStyles.card}
+      onPress={() => setExpanded((e) => !e)}
+      activeOpacity={0.85}
+    >
+      <View style={stopStyles.topRow}>
+        <View style={stopStyles.seqCircle}>
+          <Text style={stopStyles.seqText}>#{stop.sequence}</Text>
+        </View>
+        <View style={stopStyles.addrCol}>
+          <Text style={stopStyles.address} numberOfLines={1}>
+            {stop.address}
+          </Text>
+          {(stop.city || stop.state) && (
+            <Text style={stopStyles.cityLine}>
+              {[stop.city, stop.state, stop.zipCode].filter(Boolean).join(", ")}
+            </Text>
+          )}
+        </View>
+        <View style={stopStyles.rightCol}>
+          <StopStatusBadge status={stop.status} />
+          {stop.packages.length > 0 && (
+            <Text style={stopStyles.pkgCount}>{stop.packages.length} pkg</Text>
+          )}
+        </View>
+      </View>
+
+      {expanded && (
+        <View style={stopStyles.expanded}>
+          {stop.packages.length > 0 && (
+            <View style={stopStyles.pkgList}>
+              {stop.packages.map((pkg) => (
+                <View key={pkg.id} style={stopStyles.pkgRow}>
+                  <Text style={stopStyles.pkgTracking} numberOfLines={1}>
+                    {pkg.trackingNumber}
+                  </Text>
+                  <Text style={stopStyles.pkgStatus}>{pkg.status.replace(/_/g, " ")}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {stop.status !== "COMPLETED" && stop.status !== "SKIPPED" && (
+            <View style={stopStyles.actions}>
+              {updating ? (
+                <ActivityIndicator color="#3B82F6" size="small" />
+              ) : (
+                <>
+                  {stop.status === "PENDING" && (
+                    <TouchableOpacity
+                      style={[stopStyles.actionBtn, stopStyles.arrivedBtn]}
+                      onPress={() => update("ARRIVED")}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={stopStyles.actionBtnText}>Mark Arrived</Text>
+                    </TouchableOpacity>
+                  )}
+                  {(stop.status === "ARRIVED" || stop.status === "PENDING") && (
+                    <TouchableOpacity
+                      style={[stopStyles.actionBtn, stopStyles.doneBtn]}
+                      onPress={() => update("COMPLETED")}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={stopStyles.actionBtnText}>Mark Complete</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[stopStyles.actionBtn, stopStyles.skipBtn]}
+                    onPress={() => update("SKIPPED")}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[stopStyles.actionBtnText, { color: "#94A3B8" }]}>Skip</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+const stopStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 10,
+  },
+  topRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  seqCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#0F172A",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  seqText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#94A3B8",
+  },
+  addrCol: {
+    flex: 1,
+  },
+  address: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#F8FAFC",
+  },
+  cityLine: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  rightCol: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  pkgCount: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 4,
+  },
+  expanded: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#334155",
+    paddingTop: 12,
+  },
+  pkgList: {
+    marginBottom: 12,
+    gap: 6,
+  },
+  pkgRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    backgroundColor: "#0F172A",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  pkgTracking: {
+    fontSize: 12,
+    color: "#94A3B8",
+    flex: 1,
+    marginRight: 8,
+    fontFamily: "monospace",
+  },
+  pkgStatus: {
+    fontSize: 11,
+    color: "#64748B",
+    textTransform: "uppercase",
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  arrivedBtn: { backgroundColor: "#451A03", borderWidth: 1, borderColor: "#78350F" },
+  doneBtn: { backgroundColor: "#064E3B", borderWidth: 1, borderColor: "#065F46" },
+  skipBtn: { backgroundColor: "#1E293B", borderWidth: 1, borderColor: "#334155" },
+  actionBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#F8FAFC",
+  },
+});
+
+// ─── Add Stop Modal ───────────────────────────────────────
+
+function AddStopForm({
+  onAdd,
+  onCancel,
+}: {
+  onAdd: (address: string, city: string, state: string, zip: string) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (!address.trim()) {
+      if (isWeb) window.alert("Address is required");
+      return;
+    }
+    setSaving(true);
+    await onAdd(address.trim(), city.trim(), state.trim(), zip.trim());
+    setSaving(false);
+  };
+
+  return (
+    <View style={formStyles.overlay}>
+      <View style={formStyles.card}>
+        <Text style={formStyles.title}>Add Stop</Text>
+        <TextInput
+          style={formStyles.input}
+          placeholder="Address *"
+          placeholderTextColor="#475569"
+          value={address}
+          onChangeText={setAddress}
+        />
+        <TextInput
+          style={formStyles.input}
+          placeholder="City"
+          placeholderTextColor="#475569"
+          value={city}
+          onChangeText={setCity}
+        />
+        <View style={formStyles.row}>
+          <TextInput
+            style={[formStyles.input, { flex: 1 }]}
+            placeholder="State"
+            placeholderTextColor="#475569"
+            value={state}
+            onChangeText={setState}
+          />
+          <TextInput
+            style={[formStyles.input, { flex: 1 }]}
+            placeholder="ZIP"
+            placeholderTextColor="#475569"
+            value={zip}
+            onChangeText={setZip}
+            keyboardType="number-pad"
+          />
+        </View>
+        <View style={formStyles.btnRow}>
+          <TouchableOpacity style={formStyles.cancelBtn} onPress={onCancel} activeOpacity={0.7}>
+            <Text style={formStyles.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[formStyles.submitBtn, saving && formStyles.disabled]}
+            onPress={submit}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            <Text style={formStyles.submitText}>{saving ? "Adding..." : "Add Stop"}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const formStyles = StyleSheet.create({
+  overlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
+    zIndex: 100,
+  },
+  card: {
+    backgroundColor: "#1E293B",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    gap: 10,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 4,
+  },
+  input: {
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  row: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  btnRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  cancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  submitBtn: {
+    flex: 1,
+    backgroundColor: "#3B82F6",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  submitText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  disabled: { opacity: 0.5 },
+});
+
+// ─── ActiveRouteScreen ────────────────────────────────────
+
+export default function ActiveRouteScreen({ routeId, onBack }: Props) {
+  const [route, setRoute] = useState<RouteDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [showAddStop, setShowAddStop] = useState(false);
+  const [completing, setCompleting] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api.getRoute(routeId);
+      setRoute(result.route);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load route";
+      if (isWeb) window.alert(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [routeId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleUpdateStop = async (stopId: string, status: StopStatus) => {
+    try {
+      await api.updateStopStatus(routeId, stopId, { status });
+      await load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update stop";
+      if (isWeb) window.alert(msg);
+    }
+  };
+
+  const handleAddStop = async (address: string, city: string, state: string, zip: string) => {
+    try {
+      await api.addStop(routeId, {
+        address,
+        city: city || undefined,
+        state: state || undefined,
+        zipCode: zip || undefined,
+      });
+      setShowAddStop(false);
+      await load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add stop";
+      if (isWeb) window.alert(msg);
+    }
+  };
+
+  const handleCompleteRoute = async () => {
+    const ok = isWeb ? window.confirm("Mark this route as completed?") : true; // On native would use Alert — simplified for now
+    if (!ok) return;
+    setCompleting(true);
+    try {
+      await api.updateRouteStatus(routeId, "COMPLETED");
+      onBack();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to complete route";
+      if (isWeb) window.alert(msg);
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const allDone =
+    route &&
+    route.stops.length > 0 &&
+    route.stops.every((s) => s.status === "COMPLETED" || s.status === "SKIPPED");
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
+
+  if (!route) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Route not found</Text>
+        <TouchableOpacity onPress={onBack}>
+          <Text style={styles.backLink}>Go back</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  const pct =
+    route.totalStops > 0 ? Math.round((route.completedStops / route.totalStops) * 100) : 0;
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack} activeOpacity={0.7}>
+          <Text style={styles.backArrow}>← Back</Text>
+        </TouchableOpacity>
+        <View style={styles.headerBadge}>
+          <Text style={styles.headerStatus}>{route.status.replace(/_/g, " ")}</Text>
+        </View>
+      </View>
+
+      <View style={styles.titleRow}>
+        <Text style={styles.routeName} numberOfLines={1}>
+          {route.name || `Route ${route.id.slice(-6)}`}
+        </Text>
+        {route.platformLink && (
+          <Text style={styles.platform}>{route.platformLink.platform?.name}</Text>
+        )}
+      </View>
+
+      {/* Progress */}
+      <View style={styles.progressSection}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${pct}%` as `${number}%` }]} />
+        </View>
+        <View style={styles.progressStats}>
+          <Text style={styles.progressText}>
+            {route.completedStops}/{route.totalStops} stops · {pct}%
+          </Text>
+          <Text style={styles.progressText}>
+            {route.deliveredPackages}/{route.totalPackages} packages
+          </Text>
+        </View>
+      </View>
+
+      {/* Stop list */}
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+        {route.stops.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No stops yet</Text>
+            <Text style={styles.emptySubtext}>Add stops to begin delivery</Text>
+          </View>
+        ) : (
+          route.stops
+            .slice()
+            .sort((a, b) => a.sequence - b.sequence)
+            .map((stop) => <StopCard key={stop.id} stop={stop} onUpdateStatus={handleUpdateStop} />)
+        )}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Bottom actions */}
+      <View style={styles.bottomBar}>
+        <TouchableOpacity
+          style={styles.addStopBtn}
+          onPress={() => setShowAddStop(true)}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.addStopText}>+ Add Stop</Text>
+        </TouchableOpacity>
+
+        {allDone && (
+          <TouchableOpacity
+            style={[styles.completeBtn, completing && styles.disabled]}
+            onPress={handleCompleteRoute}
+            disabled={completing}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.completeBtnText}>
+              {completing ? "Completing..." : "Complete Route"}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {showAddStop && <AddStopForm onAdd={handleAddStop} onCancel={() => setShowAddStop(false)} />}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0F172A",
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#0F172A",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 18,
+    color: "#EF4444",
+    fontWeight: "600",
+  },
+  backLink: {
+    fontSize: 15,
+    color: "#3B82F6",
+  },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 8,
+  },
+  backBtn: {
+    paddingVertical: 6,
+    paddingRight: 16,
+  },
+  backArrow: {
+    fontSize: 16,
+    color: "#3B82F6",
+    fontWeight: "600",
+  },
+  headerBadge: {
+    backgroundColor: "#064E3B",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  headerStatus: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#34D399",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  titleRow: {
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  routeName: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#F8FAFC",
+  },
+  platform: {
+    fontSize: 13,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  progressSection: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+  },
+  progressTrack: {
+    height: 8,
+    backgroundColor: "#1E293B",
+    borderRadius: 4,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    backgroundColor: "#3B82F6",
+    borderRadius: 4,
+  },
+  progressStats: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 6,
+  },
+  progressText: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingHorizontal: 20,
+  },
+  emptyState: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 32,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 6,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: "#64748B",
+  },
+  bottomBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: "#0F172A",
+    borderTopWidth: 1,
+    borderTopColor: "#1E293B",
+    gap: 10,
+  },
+  addStopBtn: {
+    borderWidth: 1,
+    borderColor: "#334155",
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  addStopText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  completeBtn: {
+    backgroundColor: "#34D399",
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  completeBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  disabled: { opacity: 0.5 },
+});

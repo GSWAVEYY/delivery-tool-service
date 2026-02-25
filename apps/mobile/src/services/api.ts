@@ -7,6 +7,11 @@ import type {
   PlatformLink,
   PlatformLaunchData,
   EarningsSummary,
+  Route,
+  RouteDetail,
+  Stop,
+  Package,
+  TodayData,
 } from "../types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api";
@@ -144,6 +149,109 @@ class ApiClient {
       method: "PATCH",
       body: JSON.stringify(data),
     });
+  }
+
+  // ─── Routes ─────────────────────────────────────────────
+
+  async getRoutes(params?: { date?: string; status?: string }): Promise<{ routes: Route[] }> {
+    const query = params
+      ? "?" +
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`)
+          .join("&")
+      : "";
+    return this.request(`/routes${query}`);
+  }
+
+  async getRoute(routeId: string): Promise<{ route: RouteDetail }> {
+    return this.request(`/routes/${routeId}`);
+  }
+
+  async createRoute(data: {
+    platformLinkId?: string;
+    name: string;
+    date?: string;
+    notes?: string;
+  }): Promise<{ route: Route }> {
+    return this.request("/routes", { method: "POST", body: JSON.stringify(data) });
+  }
+
+  async updateRouteStatus(routeId: string, status: string): Promise<{ route: Route }> {
+    return this.request(`/routes/${routeId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  // ─── Stops ──────────────────────────────────────────────
+
+  async addStop(
+    routeId: string,
+    data: {
+      address: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+      sequence?: number;
+    },
+  ): Promise<{ stop: Stop }> {
+    return this.request(`/routes/${routeId}/stops`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateStopStatus(
+    routeId: string,
+    stopId: string,
+    data: { status: string; notes?: string },
+  ): Promise<{ stop: Stop }> {
+    return this.request(`/routes/${routeId}/stops/${stopId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ─── Packages ───────────────────────────────────────────
+
+  async addPackage(
+    routeId: string,
+    data: { trackingNumber: string; barcode?: string; stopId?: string },
+  ): Promise<{ package: Package }> {
+    return this.request(`/routes/${routeId}/packages`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async scanPackage(routeId: string, barcode: string): Promise<{ package: Package }> {
+    return this.request(`/routes/${routeId}/packages/scan`, {
+      method: "POST",
+      body: JSON.stringify({ barcode }),
+    });
+  }
+
+  async updatePackageStatus(
+    routeId: string,
+    packageId: string,
+    data: { status: string; notes?: string },
+  ): Promise<{ package: Package }> {
+    return this.request(`/routes/${routeId}/packages/${packageId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getRoutePackages(routeId: string, status?: string): Promise<{ packages: Package[] }> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return this.request(`/routes/${routeId}/packages${query}`);
+  }
+
+  // ─── Today ──────────────────────────────────────────────
+
+  async getToday(): Promise<TodayData> {
+    return this.request("/routes/today");
   }
 }
 

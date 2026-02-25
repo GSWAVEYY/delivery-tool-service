@@ -5,12 +5,16 @@ import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import { env } from "./lib/env.js";
 import { errorHandler } from "./lib/errors.js";
+import { authenticate } from "./middleware/auth.js";
 import authRoutes from "./routes/auth.js";
 import platformRoutes from "./routes/platforms.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import earningsRoutes from "./routes/earnings.js";
 import shiftRoutes from "./routes/shifts.js";
 import hubRoutes from "./routes/hubs.js";
+import routesRouter from "./routes/routes.js";
+import packagesRouter from "./routes/packages.js";
+import todayRouter from "./routes/today.js";
 
 const app = express();
 
@@ -76,6 +80,9 @@ app.use("/api/dashboard", apiLimiter, dashboardRoutes);
 app.use("/api/earnings", apiLimiter, earningsRoutes);
 app.use("/api/shifts", apiLimiter, shiftRoutes);
 app.use("/api/hubs", apiLimiter, hubRoutes);
+app.use("/api/routes", apiLimiter, authenticate, routesRouter);
+app.use("/api/routes", apiLimiter, authenticate, packagesRouter);
+app.use("/api/today", apiLimiter, authenticate, todayRouter);
 
 // ─── 404 ────────────────────────────────────────────────────
 

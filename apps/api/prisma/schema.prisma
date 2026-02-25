@@ -30,6 +30,7 @@ model User {
   earnings        EarningRecord[]
   shifts          Shift[]
   notifications   Notification[]
+  routes          Route[]
 
   @@index([email])
 }
@@ -95,6 +96,7 @@ model PlatformLink {
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   platform DeliveryPlatform @relation(fields: [platformId], references: [id])
+  routes   Route[]
 
   @@unique([userId, platformId])
   @@index([userId])
@@ -196,4 +198,96 @@ model Notification {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, isRead])
+}
+
+// ─── Delivery Operations ─────────────────────────────────────
+
+enum RouteStatus {
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum StopStatus {
+  PENDING
+  ARRIVED
+  COMPLETED
+  SKIPPED
+  ATTEMPTED
+}
+
+enum PackageStatus {
+  PENDING
+  SCANNED_IN
+  OUT_FOR_DELIVERY
+  DELIVERED
+  RETURNED
+  DAMAGED
+}
+
+model Route {
+  id                String      @id @default(cuid())
+  userId            String
+  platformLinkId    String?
+  date              DateTime    @default(now())
+  status            RouteStatus @default(ASSIGNED)
+  name              String?
+  totalStops        Int         @default(0)
+  completedStops    Int         @default(0)
+  totalPackages     Int         @default(0)
+  deliveredPackages Int         @default(0)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platformLink PlatformLink? @relation(fields: [platformLinkId], references: [id])
+  stops        Stop[]
+  packages     Package[]
+
+  @@index([userId, date])
+}
+
+model Stop {
+  id            String     @id @default(cuid())
+  routeId       String
+  address       String
+  city          String?
+  state         String?
+  zipCode       String?
+  latitude      Float?
+  longitude     Float?
+  sequence      Int
+  status        StopStatus @default(PENDING)
+  arrivedAt     DateTime?
+  completedAt   DateTime?
+  notes         String?
+  proofPhotoUrl String?
+
+  route    Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  packages Package[]
+
+  @@index([routeId, sequence])
+}
+
+model Package {
+  id             String        @id @default(cuid())
+  routeId        String
+  stopId         String?
+  trackingNumber String
+  barcode        String?
+  status         PackageStatus @default(PENDING)
+  scannedAt      DateTime?
+  deliveredAt    DateTime?
+  recipientName  String?
+  notes          String?
+
+  route Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  stop  Stop?  @relation(fields: [stopId], references: [id])
+
+  @@index([routeId])
+  @@index([routeId, barcode])
 }

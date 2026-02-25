@@ -1,28 +1,48 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
 import { useAuthStore } from "../store/auth";
-import DashboardScreen from "../screens/DashboardScreen";
+import TodayScreen from "../screens/TodayScreen";
+import RoutesScreen from "../screens/RoutesScreen";
+import ScanScreen from "../screens/ScanScreen";
+import ProfileScreen from "../screens/ProfileScreen";
 import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/RegisterScreen";
-import EarningsScreen from "../screens/EarningsScreen";
-import ProfileScreen from "../screens/ProfileScreen";
 import AddPlatformScreen from "../screens/AddPlatformScreen";
 import OnboardingScreen from "../screens/OnboardingScreen";
+import ActiveRouteScreen from "../screens/ActiveRouteScreen";
+import type { Route } from "../types";
 
 type AuthScreen = "login" | "register";
-type AppTab = "dashboard" | "earnings" | "profile";
-type Overlay = "addPlatform" | null;
+type AppTab = "today" | "routes" | "scan" | "profile";
+type Overlay = "addPlatform" | "activeRoute" | "createRoute" | null;
 
 export default function AppNavigator() {
   const { isAuthenticated, isLoading, loadSession, needsOnboarding, completeOnboarding } =
     useAuthStore();
   const [authScreen, setAuthScreen] = useState<AuthScreen>("login");
-  const [activeTab, setActiveTab] = useState<AppTab>("dashboard");
+  const [activeTab, setActiveTab] = useState<AppTab>("today");
   const [overlay, setOverlay] = useState<Overlay>(null);
+  const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
 
   useEffect(() => {
     loadSession();
   }, []);
+
+  const openRoute = (route: Route) => {
+    setActiveRouteId(route.id);
+    setOverlay("activeRoute");
+  };
+
+  const closeRoute = () => {
+    setActiveRouteId(null);
+    setOverlay(null);
+  };
+
+  const openCreateRoute = () => {
+    // Navigate to routes tab with create modal
+    setActiveTab("routes");
+    setOverlay("createRoute");
+  };
 
   if (isLoading) {
     return (
@@ -41,25 +61,29 @@ export default function AppNavigator() {
     return <LoginScreen onNavigateRegister={() => setAuthScreen("register")} />;
   }
 
-  // Onboarding flow — shown after first registration
+  // Onboarding flow
   if (isAuthenticated && needsOnboarding) {
     return <OnboardingScreen onComplete={completeOnboarding} />;
   }
 
-  // Overlay screens (full screen over tabs)
+  // Full-screen overlays
   if (overlay === "addPlatform") {
     return <AddPlatformScreen onDone={() => setOverlay(null)} />;
+  }
+
+  if (overlay === "activeRoute" && activeRouteId) {
+    return <ActiveRouteScreen routeId={activeRouteId} onBack={closeRoute} />;
   }
 
   // Main tabbed app
   return (
     <View style={styles.appContainer}>
-      {/* Active screen */}
       <View style={styles.screenContainer}>
-        {activeTab === "dashboard" && (
-          <DashboardScreen onAddPlatform={() => setOverlay("addPlatform")} />
+        {activeTab === "today" && (
+          <TodayScreen onViewRoute={openRoute} onCreateRoute={openCreateRoute} />
         )}
-        {activeTab === "earnings" && <EarningsScreen />}
+        {activeTab === "routes" && <RoutesScreen onViewRoute={openRoute} />}
+        {activeTab === "scan" && <ScanScreen />}
         {activeTab === "profile" && <ProfileScreen />}
       </View>
 
@@ -67,26 +91,39 @@ export default function AppNavigator() {
       <View style={styles.tabBar}>
         <TouchableOpacity
           style={styles.tab}
-          onPress={() => setActiveTab("dashboard")}
+          onPress={() => setActiveTab("today")}
           activeOpacity={0.7}
         >
-          <Text style={[styles.tabIcon, activeTab === "dashboard" && styles.tabIconActive]}>
+          <Text style={[styles.tabIcon, activeTab === "today" && styles.tabIconActive]}>
             {"\u2302"}
           </Text>
-          <Text style={[styles.tabLabel, activeTab === "dashboard" && styles.tabLabelActive]}>
-            Home
+          <Text style={[styles.tabLabel, activeTab === "today" && styles.tabLabelActive]}>
+            Today
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.tab}
-          onPress={() => setActiveTab("earnings")}
+          onPress={() => setActiveTab("routes")}
           activeOpacity={0.7}
         >
-          <Text style={[styles.tabIcon, activeTab === "earnings" && styles.tabIconActive]}>$</Text>
-          <Text style={[styles.tabLabel, activeTab === "earnings" && styles.tabLabelActive]}>
-            Earnings
+          <Text style={[styles.tabIcon, activeTab === "routes" && styles.tabIconActive]}>
+            {"\u2630"}
           </Text>
+          <Text style={[styles.tabLabel, activeTab === "routes" && styles.tabLabelActive]}>
+            Routes
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tab}
+          onPress={() => setActiveTab("scan")}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.tabIcon, activeTab === "scan" && styles.tabIconActive]}>
+            {"\u2610"}
+          </Text>
+          <Text style={[styles.tabLabel, activeTab === "scan" && styles.tabLabelActive]}>Scan</Text>
         </TouchableOpacity>
 
         <TouchableOpacity

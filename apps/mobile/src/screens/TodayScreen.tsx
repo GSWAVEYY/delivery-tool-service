@@ -315,23 +315,19 @@ export default function TodayScreen({ onViewRoute, onCreateRoute }: Props) {
           </View>
         )}
 
-        {/* Platform cards */}
+        {/* Distributor tabs */}
         <View style={styles.platformSection}>
-          <Text style={[styles.sectionTitle, { paddingHorizontal: 20 }]}>Your Platforms</Text>
+          <Text style={[styles.sectionTitle, { paddingHorizontal: 20 }]}>Your Distributors</Text>
           {platformLinks.length === 0 ? (
             <TouchableOpacity
               style={styles.platformCTA}
               onPress={onCreateRoute}
               activeOpacity={0.8}
             >
-              <Text style={styles.platformCTAText}>Link your delivery platforms →</Text>
+              <Text style={styles.platformCTAText}>Link your distributors →</Text>
             </TouchableOpacity>
           ) : (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.platformScroll}
-            >
+            <View style={styles.distributorList}>
               {platformLinks.map((link) => {
                 const color = getPlatformColor(link.platform.name);
                 const initial = getPlatformInitial(link.platform.name);
@@ -340,32 +336,33 @@ export default function TodayScreen({ onViewRoute, onCreateRoute }: Props) {
                     r.platformLink?.platformId === link.platformId || r.platformLinkId === link.id,
                 ).length;
                 return (
-                  <View key={link.id} style={styles.platformCard}>
+                  <TouchableOpacity
+                    key={link.id}
+                    style={[styles.distributorTab, { borderLeftColor: color, borderLeftWidth: 4 }]}
+                    onPress={() => handleLaunch(link)}
+                    activeOpacity={0.75}
+                  >
                     <View
                       style={[
-                        styles.platformIcon,
+                        styles.distributorIcon,
                         { backgroundColor: color + "22", borderColor: color + "55" },
                       ]}
                     >
-                      <Text style={[styles.platformInitial, { color }]}>{initial}</Text>
+                      <Text style={[styles.distributorInitial, { color }]}>{initial}</Text>
                     </View>
-                    <Text style={styles.platformName} numberOfLines={1}>
-                      {link.displayName || link.platform.name}
-                    </Text>
-                    <Text style={styles.platformRoutes}>
-                      {routeCount} route{routeCount !== 1 ? "s" : ""} today
-                    </Text>
-                    <TouchableOpacity
-                      style={[styles.openAppBtn, { borderColor: color + "88" }]}
-                      onPress={() => handleLaunch(link)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.openAppText, { color }]}>Open App</Text>
-                    </TouchableOpacity>
-                  </View>
+                    <View style={styles.distributorInfo}>
+                      <Text style={styles.distributorName}>
+                        {link.displayName || link.platform.name}
+                      </Text>
+                      <Text style={styles.distributorMeta}>
+                        {routeCount} route{routeCount !== 1 ? "s" : ""} today
+                      </Text>
+                    </View>
+                    <Text style={[styles.distributorArrow, { color }]}>→</Text>
+                  </TouchableOpacity>
                 );
               })}
-            </ScrollView>
+            </View>
           )}
         </View>
 
@@ -608,19 +605,19 @@ const styles = StyleSheet.create({
   platformSection: {
     marginBottom: 20,
   },
-  platformScroll: {
+  distributorList: {
     paddingHorizontal: 20,
-    gap: 12,
+    gap: 10,
   },
-  platformCard: {
+  distributorTab: {
+    flexDirection: "row",
+    alignItems: "center",
     backgroundColor: "#1E293B",
     borderRadius: 14,
-    padding: 14,
-    width: 140,
-    alignItems: "center",
-    gap: 6,
+    padding: 16,
+    gap: 14,
   },
-  platformIcon: {
+  distributorIcon: {
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -628,30 +625,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
   },
-  platformInitial: {
+  distributorInitial: {
     fontSize: 20,
     fontWeight: "800",
   },
-  platformName: {
-    fontSize: 13,
+  distributorInfo: {
+    flex: 1,
+  },
+  distributorName: {
+    fontSize: 15,
     fontWeight: "700",
     color: "#F8FAFC",
-    textAlign: "center",
   },
-  platformRoutes: {
-    fontSize: 11,
-    color: "#64748B",
-    textAlign: "center",
-  },
-  openAppBtn: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-  },
-  openAppText: {
+  distributorMeta: {
     fontSize: 12,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  distributorArrow: {
+    fontSize: 20,
     fontWeight: "700",
   },
   platformCTA: {

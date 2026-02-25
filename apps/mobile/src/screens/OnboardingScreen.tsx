@@ -11,6 +11,7 @@ import {
 import type { DeliveryPlatform } from "../types";
 import api from "../services/api";
 import { useAuthStore } from "../store/auth";
+import { getPlatformColor } from "../utils/platformColors";
 
 const isWeb = Platform.OS === "web";
 
@@ -107,9 +108,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
 
           {/* Feature bullets */}
           <View style={styles.featureList}>
-            <FeatureBullet icon="⚡" text="Launch all your delivery apps in one tap" />
-            <FeatureBullet icon="💰" text="Track earnings across every platform" />
-            <FeatureBullet icon="📊" text="Monitor shifts and stay on top of income" />
+            <FeatureBullet icon="📦" text="Manage routes across all your distributors" />
+            <FeatureBullet icon="📋" text="Scan packages, track stops, log deliveries" />
+            <FeatureBullet icon="🏥" text="Built for medical & pharmaceutical delivery" />
           </View>
 
           <TouchableOpacity
@@ -138,8 +139,10 @@ export default function OnboardingScreen({ onComplete }: Props) {
           <View style={styles.progressFill} />
         </View>
         <Text style={styles.stepIndicator}>Step 2 of 2</Text>
-        <Text style={styles.step2Headline}>Which platforms do you deliver for?</Text>
-        <Text style={styles.step2Sub}>Select all that apply — you can add more later.</Text>
+        <Text style={styles.step2Headline}>Which distributors do you deliver for?</Text>
+        <Text style={styles.step2Sub}>
+          Select all that apply. These are your subcontracted carriers.
+        </Text>
       </View>
 
       {/* Platform grid */}
@@ -157,26 +160,39 @@ export default function OnboardingScreen({ onComplete }: Props) {
           <View style={styles.platformGrid}>
             {platforms.map((platform) => {
               const isSelected = selected.has(platform.id);
+              const brandColor = getPlatformColor(platform.name);
               return (
                 <TouchableOpacity
                   key={platform.id}
-                  style={[styles.platformCard, isSelected && styles.platformCardSelected]}
+                  style={[
+                    styles.platformCard,
+                    isSelected && { borderColor: brandColor, backgroundColor: brandColor + "12" },
+                  ]}
                   onPress={() => togglePlatform(platform.id)}
                   activeOpacity={0.75}
                 >
-                  {/* Check badge */}
                   {isSelected && (
-                    <View style={styles.checkBadge}>
+                    <View style={[styles.checkBadge, { backgroundColor: brandColor }]}>
                       <Text style={styles.checkBadgeText}>✓</Text>
                     </View>
                   )}
-                  <View style={[styles.platformIcon, isSelected && styles.platformIconSelected]}>
-                    <Text style={styles.platformInitial}>
+                  <View
+                    style={[
+                      styles.platformIcon,
+                      {
+                        backgroundColor: brandColor + "22",
+                        borderWidth: 1,
+                        borderColor: brandColor + "55",
+                      },
+                      isSelected && { backgroundColor: brandColor + "33" },
+                    ]}
+                  >
+                    <Text style={[styles.platformInitial, { color: brandColor }]}>
                       {platform.name.charAt(0).toUpperCase()}
                     </Text>
                   </View>
                   <Text
-                    style={[styles.platformName, isSelected && styles.platformNameSelected]}
+                    style={[styles.platformName, isSelected && { color: "#F8FAFC" }]}
                     numberOfLines={2}
                   >
                     {platform.name}

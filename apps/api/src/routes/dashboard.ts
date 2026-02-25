@@ -17,7 +17,7 @@ router.get(
 
     const [platformLinks, todayShifts, recentEarnings, unreadNotifications] = await Promise.all([
       prisma.platformLink.findMany({
-        where: { userId, isActive: true },
+        where: { userId, isActive: true, platform: { isActive: true } },
         orderBy: { sortOrder: "asc" },
         include: {
           platform: {

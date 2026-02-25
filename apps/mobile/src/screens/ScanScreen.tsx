@@ -253,6 +253,21 @@ export default function ScanScreen() {
     }
   };
 
+  const handleMarkDelivered = async (pkg: RecentScan) => {
+    if (!selectedRouteId) return;
+    try {
+      const result = await api.updatePackageStatus(selectedRouteId, pkg.id, {
+        status: "DELIVERED",
+      });
+      setRecentScans((prev) =>
+        prev.map((s) => (s.id === pkg.id ? { ...s, status: result.package.status } : s)),
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to mark delivered";
+      if (isWeb) window.alert(msg);
+    }
+  };
+
   const resetSession = () => {
     setSessionStats({ scanned: 0, newPackages: 0, errors: 0 });
     setRecentScans([]);
@@ -567,33 +582,67 @@ export default function ScanScreen() {
         {recentScans.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.label}>Recent Scans</Text>
-            {recentScans.map((pkg) => (
-              <View
-                key={`${pkg.id}-${pkg.scannedLocal}`}
-                style={[
-                  styles.scanRecord,
-                  pkg.isNew && quickStyles.newRecord,
-                  pkg.isError && quickStyles.errorRecord,
-                ]}
-              >
-                <View style={styles.scanRecordLeft}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                    <Text style={styles.scanTracking} numberOfLines={1}>
-                      {pkg.trackingNumber}
-                    </Text>
-                    {pkg.isNew && <Text style={quickStyles.newBadge}>NEW</Text>}
+            {recentScans.map((pkg) => {
+              const canDeliver = pkg.status === "SCANNED_IN" || pkg.status === "OUT_FOR_DELIVERY";
+              return (
+                <View
+                  key={`${pkg.id}-${pkg.scannedLocal}`}
+                  style={[
+                    styles.scanRecord,
+                    pkg.isNew && quickStyles.newRecord,
+                    pkg.isError && quickStyles.errorRecord,
+                  ]}
+                >
+                  <View style={styles.scanRecordLeft}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                      <Text style={styles.scanTracking} numberOfLines={1}>
+                        {pkg.trackingNumber}
+                      </Text>
+                      {pkg.isNew && <Text style={quickStyles.newBadge}>NEW</Text>}
+                    </View>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 3 }}
+                    >
+                      <Text style={styles.scanTime}>
+                        {new Date(pkg.scannedLocal).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </Text>
+                      {pkg.requiresSignature && <Text style={scanTagStyles.tag}>SIG</Text>}
+                      {pkg.temperatureSensitive && (
+                        <Text style={[scanTagStyles.tag, scanTagStyles.coldTag]}>COLD</Text>
+                      )}
+                      {pkg.priority && pkg.priority !== "Routine" && (
+                        <Text
+                          style={[
+                            scanTagStyles.tag,
+                            pkg.priority === "STAT"
+                              ? scanTagStyles.statTag
+                              : scanTagStyles.urgentTag,
+                          ]}
+                        >
+                          {pkg.priority.toUpperCase()}
+                        </Text>
+                      )}
+                    </View>
                   </View>
-                  <Text style={styles.scanTime}>
-                    {new Date(pkg.scannedLocal).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
-                    })}
-                  </Text>
+                  <View style={{ alignItems: "flex-end", gap: 6 }}>
+                    <PackageStatusBadge status={pkg.status} />
+                    {canDeliver && selectedRouteId && (
+                      <TouchableOpacity
+                        style={deliverBtnStyles.btn}
+                        onPress={() => handleMarkDelivered(pkg)}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={deliverBtnStyles.text}>Deliver</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-                <PackageStatusBadge status={pkg.status} />
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
 
@@ -1002,6 +1051,47 @@ const styles = StyleSheet.create({
   scanTime: {
     fontSize: 11,
     color: "#475569",
-    marginTop: 2,
+  },
+});
+
+const scanTagStyles = StyleSheet.create({
+  tag: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#F59E0B",
+    backgroundColor: "#451A03",
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    textTransform: "uppercase",
+  },
+  coldTag: {
+    color: "#22D3EE",
+    backgroundColor: "#0E4459",
+  },
+  statTag: {
+    color: "#EF4444",
+    backgroundColor: "#450A0A",
+  },
+  urgentTag: {
+    color: "#F59E0B",
+    backgroundColor: "#451A03",
+  },
+});
+
+const deliverBtnStyles = StyleSheet.create({
+  btn: {
+    backgroundColor: "#064E3B",
+    borderRadius: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: "#065F46",
+  },
+  text: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: "#34D399",
+    textTransform: "uppercase",
   },
 });

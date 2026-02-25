@@ -14,6 +14,12 @@ const addPackageSchema = z.object({
   barcode: z.string().optional(),
   stopId: z.string().optional(),
   recipientName: z.string().optional(),
+  requiresSignature: z.boolean().optional(),
+  temperatureSensitive: z.boolean().optional(),
+  temperatureRange: z.string().optional(),
+  priority: z.string().optional(),
+  deliveryInstructions: z.string().optional(),
+  recipientType: z.string().optional(),
 });
 
 router.post(
@@ -39,6 +45,12 @@ router.post(
           trackingNumber: req.body.trackingNumber,
           barcode: req.body.barcode,
           recipientName: req.body.recipientName,
+          requiresSignature: req.body.requiresSignature ?? false,
+          temperatureSensitive: req.body.temperatureSensitive ?? false,
+          temperatureRange: req.body.temperatureRange,
+          priority: req.body.priority,
+          deliveryInstructions: req.body.deliveryInstructions,
+          recipientType: req.body.recipientType,
           status: PackageStatus.SCANNED_IN,
           scannedAt: new Date(),
         },
@@ -79,9 +91,12 @@ router.post(
     if (!route) throw AppError.notFound("Route not found");
 
     const existing = await prisma.package.findFirst({
-      where: { routeId: id, barcode },
+      where: {
+        routeId: id,
+        OR: [{ barcode }, { trackingNumber: barcode }],
+      },
     });
-    if (!existing) throw AppError.notFound("Package with that barcode not found in this route");
+    if (!existing) throw AppError.notFound("Package not found in this route");
 
     const nextStatus = SCAN_PROGRESSION[existing.status] ?? existing.status;
     const isDelivering =

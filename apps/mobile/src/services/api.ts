@@ -255,7 +255,7 @@ class ApiClient {
     packageId: string,
     data: { status: string; notes?: string },
   ): Promise<{ package: Package }> {
-    return this.request(`/routes/${routeId}/packages/${packageId}/status`, {
+    return this.request(`/routes/${routeId}/packages/${packageId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     });

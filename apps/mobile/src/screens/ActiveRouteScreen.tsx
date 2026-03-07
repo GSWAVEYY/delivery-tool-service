@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Platform,
   TextInput,
+  Alert,
   ActivityIndicator,
   Linking,
 } from "react-native";
@@ -708,6 +709,9 @@ export default function ActiveRouteScreen({
   const [showAddStop, setShowAddStop] = useState(false);
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -793,6 +797,28 @@ export default function ActiveRouteScreen({
       }
     } catch {
       // non-fatal
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    if (!templateName.trim()) {
+      if (isWeb) window.alert("Please enter a template name");
+      else Alert.alert("Error", "Please enter a template name");
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      await api.saveAsTemplate(routeId, templateName.trim());
+      setShowSaveTemplate(false);
+      setTemplateName("");
+      if (isWeb) window.alert("Template saved!");
+      else Alert.alert("Success", "Template saved! It's now available for all drivers.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save template";
+      if (isWeb) window.alert(msg);
+      else Alert.alert("Error", msg);
+    } finally {
+      setSavingTemplate(false);
     }
   };
 
@@ -950,6 +976,49 @@ export default function ActiveRouteScreen({
             <Text style={styles.importBtnText}>Import Stops</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity
+          style={saveTemplateStyles.btn}
+          onPress={() => {
+            setTemplateName(route?.name || "");
+            setShowSaveTemplate(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={saveTemplateStyles.btnText}>Save as Template</Text>
+        </TouchableOpacity>
+
+        {showSaveTemplate && (
+          <View style={saveTemplateStyles.form}>
+            <Text style={saveTemplateStyles.label}>Template Name</Text>
+            <TextInput
+              style={saveTemplateStyles.input}
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="e.g. Monday McKesson Run"
+              placeholderTextColor="#64748B"
+            />
+            <View style={saveTemplateStyles.actions}>
+              <TouchableOpacity
+                style={saveTemplateStyles.cancelBtn}
+                onPress={() => setShowSaveTemplate(false)}
+                activeOpacity={0.7}
+              >
+                <Text style={saveTemplateStyles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[saveTemplateStyles.confirmBtn, savingTemplate && { opacity: 0.5 }]}
+                onPress={handleSaveTemplate}
+                disabled={savingTemplate}
+                activeOpacity={0.7}
+              >
+                <Text style={saveTemplateStyles.confirmText}>
+                  {savingTemplate ? "Saving..." : "Save Template"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         {allDone && (
           <TouchableOpacity
@@ -1189,4 +1258,72 @@ const styles = StyleSheet.create({
     color: "#0F172A",
   },
   disabled: { opacity: 0.5 },
+});
+
+const saveTemplateStyles = StyleSheet.create({
+  btn: {
+    backgroundColor: "#1E3A5F",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#2563EB",
+    marginTop: 10,
+  },
+  btnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#93C5FD",
+  },
+  form: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 18,
+    marginTop: 12,
+  },
+  label: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#94A3B8",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#334155",
+    marginBottom: 12,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  cancelText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  confirmBtn: {
+    flex: 1,
+    backgroundColor: "#2563EB",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  confirmText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
 });

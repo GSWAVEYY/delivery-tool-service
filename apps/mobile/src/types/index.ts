@@ -164,6 +164,34 @@ export interface Package {
   recipientType?: string;
 }
 
+export interface TemplateStop {
+  id: string;
+  templateId: string;
+  address: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  sequence: number;
+  facilityName?: string;
+  facilityType?: string;
+  contactName?: string;
+  contactPhone?: string;
+  deliveryWindow?: string;
+  notes?: string;
+}
+
+export interface RouteTemplate {
+  id: string;
+  name: string;
+  platformLinkId?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  creator: { id: string; firstName: string; lastName: string };
+  platformLink?: { platform: { id: string; name: string; slug: string } };
+  stops: TemplateStop[];
+}
+
 export interface TodayData {
   todayRoutes: Route[];
   stats: {
@@ -173,4 +201,66 @@ export interface TodayData {
     deliveredPackages: number;
     activeRoutes: number;
   };
+}
+
+// ─── Admin Types ─────────────────────────────────────────
+
+export interface AdminDashboardData {
+  activeDrivers: number;
+  routes: {
+    total: number;
+    inProgress: number;
+    completed: number;
+    completionRate: number;
+  };
+  drivers: AdminDriverCard[];
+  todayRoutes: AdminRouteCard[];
+}
+
+export interface AdminDriverCard {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarUrl: string | null;
+  shiftStart: string;
+  currentRoute: AdminRouteCard | null;
+  routesCompleted: number;
+  routesTotal: number;
+}
+
+export interface AdminRouteCard {
+  id: string;
+  name: string | null;
+  status: RouteStatus;
+  totalStops: number;
+  completedStops: number;
+  totalPackages: number;
+  deliveredPackages: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  driver: { id: string; firstName: string; lastName: string };
+  platform: string | { id: string; name: string; slug: string } | null;
+}
+
+export interface AdminRoutesData {
+  routes: AdminRouteDetail[];
+  filters: {
+    drivers: { id: string; firstName: string; lastName: string }[];
+    platforms: { id: string; name: string; slug: string }[];
+  };
+  total: number;
+}
+
+export interface AdminRouteDetail extends AdminRouteCard {
+  date: string;
+  notes: string | null;
+  platform: { id: string; name: string; slug: string } | null;
+  stops: {
+    id: string;
+    status: StopStatus;
+    address: string;
+    sequence: number;
+    facilityName: string | null;
+  }[];
 }

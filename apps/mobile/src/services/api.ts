@@ -12,6 +12,8 @@ import type {
   Stop,
   Package,
   TodayData,
+  RouteTemplate,
+  TemplateStop,
 } from "../types";
 
 const API_BASE = process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api";
@@ -266,10 +268,64 @@ class ApiClient {
     return this.request(`/routes/${routeId}/packages${query}`);
   }
 
+  // ─── Templates ────────────────────────────────────────────
+
+  async getTemplates(): Promise<{ templates: RouteTemplate[]; total: number }> {
+    return this.request("/templates");
+  }
+
+  async saveAsTemplate(routeId: string, name: string): Promise<{ template: RouteTemplate }> {
+    return this.request("/templates", {
+      method: "POST",
+      body: JSON.stringify({ routeId, name }),
+    });
+  }
+
+  async useTemplate(templateId: string): Promise<{ route: Route }> {
+    return this.request(`/templates/${templateId}/use`, { method: "POST" });
+  }
+
+  async updateTemplateStopNotes(
+    templateId: string,
+    stopId: string,
+    notes: string,
+  ): Promise<{ stop: TemplateStop }> {
+    return this.request(`/templates/${templateId}/stops/${stopId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ notes }),
+    });
+  }
+
+  async deleteTemplate(templateId: string): Promise<{ message: string }> {
+    return this.request(`/templates/${templateId}`, { method: "DELETE" });
+  }
+
   // ─── Today ──────────────────────────────────────────────
 
   async getToday(): Promise<TodayData> {
     return this.request("/routes/today");
+  }
+
+  // ─── Admin ──────────────────────────────────────────────
+
+  async getAdminDashboard(): Promise<import("../types").AdminDashboardData> {
+    return this.request("/admin/dashboard");
+  }
+
+  async getAdminRoutes(params?: {
+    status?: string;
+    driver?: string;
+    platform?: string;
+    date?: string;
+  }): Promise<import("../types").AdminRoutesData> {
+    const query = params
+      ? "?" +
+        Object.entries(params)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => `${k}=${encodeURIComponent(v as string)}`)
+          .join("&")
+      : "";
+    return this.request(`/admin/routes${query}`);
   }
 }
 

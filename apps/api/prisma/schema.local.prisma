@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -151,9 +151,9 @@ model EarningRecord {
   userId         String
   platform       String   // Platform name snapshot
   platformLinkId String?
-  amount         Decimal  @db.Decimal(10, 2)
+  amount         Float
   currency       String   @default("USD")
-  tips           Decimal? @db.Decimal(10, 2)
+  tips           Float?
   deliveries     Int?
   date           DateTime
   description    String?

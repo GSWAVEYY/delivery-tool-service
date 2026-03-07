@@ -3,7 +3,7 @@ import { z } from "zod";
 import prisma from "../lib/prisma.js";
 import { authenticate } from "../middleware/auth.js";
 import { validate } from "../middleware/validate.js";
-import { asyncHandler } from "../lib/errors.js";
+import { AppError, asyncHandler } from "../lib/errors.js";
 
 const router = Router();
 router.use(authenticate);
@@ -63,22 +63,22 @@ router.get(
           userId,
           date: { gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) },
         },
-        _sum: { amount: true, tips: true },
+        _sum: { amount: true, tips: true, deliveries: true },
         _count: true,
       }),
       prisma.earningRecord.aggregate({
         where: { userId, date: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
-        _sum: { amount: true, tips: true },
+        _sum: { amount: true, tips: true, deliveries: true },
         _count: true,
       }),
       prisma.earningRecord.aggregate({
         where: { userId, date: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } },
-        _sum: { amount: true, tips: true },
+        _sum: { amount: true, tips: true, deliveries: true },
         _count: true,
       }),
       prisma.earningRecord.aggregate({
         where: { userId },
-        _sum: { amount: true, tips: true },
+        _sum: { amount: true, tips: true, deliveries: true },
         _count: true,
       }),
     ]);
@@ -87,6 +87,7 @@ router.get(
       earnings: Number(agg._sum.amount || 0),
       tips: Number(agg._sum.tips || 0),
       deliveries: agg._count,
+      totalDeliveries: Number(agg._sum.deliveries || 0),
     });
 
     res.json({
@@ -101,25 +102,38 @@ router.get(
 // ─── POST /earnings ─────────────────────────────────────────
 
 const createEarningSchema = z.object({
-  platform: z.string().min(1),
-  amount: z.number().positive(),
+  platformLinkId: z.string().min(1),
+  earnings: z.number().positive(),
   tips: z.number().min(0).optional(),
-  date: z.string().datetime(),
-  description: z.string().optional(),
+  deliveries: z.number().int().min(0).optional(),
+  date: z.string().min(1),
+  notes: z.string().optional(),
 });
 
 router.post(
   "/",
   validate(createEarningSchema),
   asyncHandler(async (req: Request, res: Response) => {
+    const userId = req.user!.userId;
+    const { platformLinkId, earnings, tips, deliveries, date, notes } = req.body;
+
+    // Resolve platform name from the link
+    const link = await prisma.platformLink.findFirst({
+      where: { id: platformLinkId, userId },
+      include: { platform: { select: { name: true } } },
+    });
+    if (!link) throw new AppError(404, "Platform link not found");
+
     const earning = await prisma.earningRecord.create({
       data: {
-        userId: req.user!.userId,
-        platform: req.body.platform,
-        amount: req.body.amount,
-        tips: req.body.tips,
-        date: new Date(req.body.date),
-        description: req.body.description,
+        userId,
+        platform: link.platform.name,
+        platformLinkId,
+        amount: earnings,
+        tips,
+        deliveries,
+        date: new Date(date),
+        description: notes,
       },
     });
     res.status(201).json({ earning });

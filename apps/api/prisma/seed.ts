@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
@@ -56,6 +57,47 @@ async function main() {
   }
 
   console.log(`\nSeeded ${PLATFORMS.length} platforms.`);
+
+  // ─── Demo accounts ──────────────────────────────────────
+  console.log("\nSeeding demo accounts...");
+  const passwordHash = await bcrypt.hash("demo1234", 12);
+
+  const glenn = await prisma.user.upsert({
+    where: { email: "glenn@deliverybridge.app" },
+    create: {
+      email: "glenn@deliverybridge.app",
+      passwordHash,
+      firstName: "Glenn",
+      lastName: "Admin",
+      role: "SUPER_ADMIN",
+    },
+    update: { passwordHash, firstName: "Glenn", lastName: "Admin" },
+  });
+  console.log(`  ✓ Glenn (glenn@deliverybridge.app / demo1234)`);
+
+  const demo = await prisma.user.upsert({
+    where: { email: "demo@deliverybridge.app" },
+    create: {
+      email: "demo@deliverybridge.app",
+      passwordHash,
+      firstName: "Demo",
+      lastName: "Driver",
+      role: "WORKER",
+    },
+    update: { passwordHash, firstName: "Demo", lastName: "Driver" },
+  });
+  console.log(`  ✓ Demo Driver (demo@deliverybridge.app / demo1234)`);
+
+  // Link all platforms to Glenn's account
+  const allPlatforms = await prisma.deliveryPlatform.findMany({ where: { isActive: true } });
+  for (const platform of allPlatforms) {
+    await prisma.platformLink.upsert({
+      where: { userId_platformId: { userId: glenn.id, platformId: platform.id } },
+      create: { userId: glenn.id, platformId: platform.id },
+      update: {},
+    });
+  }
+  console.log(`  ✓ Linked ${allPlatforms.length} platforms to Glenn`);
 }
 
 main()

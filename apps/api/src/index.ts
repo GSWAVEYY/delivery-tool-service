@@ -15,6 +15,8 @@ import hubRoutes from "./routes/hubs.js";
 import routesRouter from "./routes/routes.js";
 import packagesRouter from "./routes/packages.js";
 import todayRouter from "./routes/today.js";
+import templateRoutes from "./routes/templates.js";
+import adminRoutes from "./routes/admin.js";
 
 const app = express();
 
@@ -83,6 +85,8 @@ app.use("/api/hubs", apiLimiter, hubRoutes);
 app.use("/api/routes", apiLimiter, authenticate, routesRouter);
 app.use("/api/routes", apiLimiter, authenticate, packagesRouter);
 app.use("/api/today", apiLimiter, authenticate, todayRouter);
+app.use("/api/templates", apiLimiter, templateRoutes);
+app.use("/api/admin", apiLimiter, adminRoutes);
 
 // ─── 404 ────────────────────────────────────────────────────
 

@@ -9,9 +9,10 @@ import {
   Platform,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import api from "../services/api";
-import type { Route, RouteStatus, PlatformLink } from "../types";
+import type { Route, RouteStatus, PlatformLink, RouteTemplate } from "../types";
 import { getPlatformColor, getPlatformInitial } from "../utils/platformColors";
 
 const isWeb = Platform.OS === "web";
@@ -460,6 +461,71 @@ export default function RoutesScreen({ onViewRoute }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [templates, setTemplates] = useState<RouteTemplate[]>([]);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [usingTemplate, setUsingTemplate] = useState<string | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<RouteTemplate | null>(null);
+  const [editingStopId, setEditingStopId] = useState<string | null>(null);
+  const [stopNoteText, setStopNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+
+  const fetchTemplates = async () => {
+    try {
+      const data = await api.getTemplates();
+      setTemplates(data.templates);
+    } catch {
+      // non-fatal
+    }
+  };
+
+  const handleUseTemplate = async (templateId: string) => {
+    setUsingTemplate(templateId);
+    try {
+      const data = await api.useTemplate(templateId);
+      setShowTemplatePicker(false);
+      setSelectedTemplate(null);
+      onViewRoute(data.route);
+      load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to create route from template";
+      if (isWeb) window.alert(msg);
+      else Alert.alert("Error", msg);
+    } finally {
+      setUsingTemplate(null);
+    }
+  };
+
+  const handleSaveStopNote = async (templateId: string, stopId: string) => {
+    setSavingNote(true);
+    try {
+      await api.updateTemplateStopNotes(templateId, stopId, stopNoteText);
+      setSelectedTemplate((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          stops: prev.stops.map((s) => (s.id === stopId ? { ...s, notes: stopNoteText } : s)),
+        };
+      });
+      setTemplates((prev) =>
+        prev.map((t) =>
+          t.id === templateId
+            ? {
+                ...t,
+                stops: t.stops.map((s) => (s.id === stopId ? { ...s, notes: stopNoteText } : s)),
+              }
+            : t,
+        ),
+      );
+      setEditingStopId(null);
+      setStopNoteText("");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to save note";
+      if (isWeb) window.alert(msg);
+      else Alert.alert("Error", msg);
+    } finally {
+      setSavingNote(false);
+    }
+  };
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -513,6 +579,16 @@ export default function RoutesScreen({ onViewRoute }: Props) {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.heading}>Routes</Text>
+        <TouchableOpacity
+          style={tplStyles.btn}
+          onPress={() => {
+            fetchTemplates();
+            setShowTemplatePicker(true);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={tplStyles.btnText}>Start from Template</Text>
+        </TouchableOpacity>
         {/* Filter chips */}
         <View style={styles.filterRow}>
           {FILTERS.map((f) => (
@@ -591,6 +667,161 @@ export default function RoutesScreen({ onViewRoute }: Props) {
           onCreated={handleCreated}
           onCancel={() => setShowCreate(false)}
         />
+      )}
+
+      {showTemplatePicker && !selectedTemplate && (
+        <View style={tplStyles.overlay}>
+          <View style={tplStyles.pickerHeader}>
+            <Text style={tplStyles.pickerTitle}>Choose a Template</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowTemplatePicker(false);
+                setSelectedTemplate(null);
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={tplStyles.closeText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={tplStyles.pickerScroll} keyboardShouldPersistTaps="handled">
+            {templates.length === 0 ? (
+              <View style={tplStyles.emptyState}>
+                <Text style={tplStyles.emptyTitle}>No templates yet</Text>
+                <Text style={tplStyles.emptyBody}>
+                  Save a route as a template to reuse it later.
+                </Text>
+              </View>
+            ) : (
+              templates.map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={tplStyles.card}
+                  onPress={() => setSelectedTemplate(t)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={tplStyles.cardName}>{t.name}</Text>
+                  <View style={tplStyles.cardMeta}>
+                    {t.platformLink?.platform?.name && (
+                      <Text style={tplStyles.cardPlatform}>{t.platformLink.platform.name}</Text>
+                    )}
+                    <Text style={tplStyles.cardDetail}>
+                      {t.stops.length} stop{t.stops.length !== 1 ? "s" : ""}
+                    </Text>
+                    <Text style={tplStyles.cardDetail}>
+                      by {t.creator.firstName} {t.creator.lastName}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ))
+            )}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+        </View>
+      )}
+
+      {showTemplatePicker && selectedTemplate && (
+        <View style={tplStyles.overlay}>
+          <View style={tplStyles.pickerHeader}>
+            <TouchableOpacity onPress={() => setSelectedTemplate(null)}>
+              <Text style={tplStyles.closeText}>Back</Text>
+            </TouchableOpacity>
+            <Text style={tplStyles.pickerTitle}>{selectedTemplate.name}</Text>
+            <TouchableOpacity
+              onPress={() => {
+                setShowTemplatePicker(false);
+                setSelectedTemplate(null);
+              }}
+            >
+              <Text style={tplStyles.closeText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+
+          {selectedTemplate.platformLink && (
+            <Text style={tplStyles.detailPlatform}>
+              {selectedTemplate.platformLink.platform.name}
+            </Text>
+          )}
+
+          <ScrollView style={tplStyles.pickerScroll} keyboardShouldPersistTaps="handled">
+            {selectedTemplate.stops.map((stop) => (
+              <View key={stop.id} style={stopNoteStyles.card}>
+                <View style={stopNoteStyles.stopHeader}>
+                  <Text style={stopNoteStyles.sequence}>{stop.sequence}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={stopNoteStyles.address}>{stop.address}</Text>
+                    {stop.city && (
+                      <Text style={stopNoteStyles.city}>
+                        {stop.city}
+                        {stop.state ? `, ${stop.state}` : ""} {stop.zipCode || ""}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+
+                {editingStopId === stop.id ? (
+                  <View style={stopNoteStyles.editForm}>
+                    <TextInput
+                      style={stopNoteStyles.input}
+                      value={stopNoteText}
+                      onChangeText={setStopNoteText}
+                      placeholder="Add helpful notes for drivers..."
+                      placeholderTextColor="#64748B"
+                      multiline
+                      numberOfLines={3}
+                    />
+                    <View style={stopNoteStyles.editActions}>
+                      <TouchableOpacity
+                        style={stopNoteStyles.cancelBtn}
+                        onPress={() => {
+                          setEditingStopId(null);
+                          setStopNoteText("");
+                        }}
+                      >
+                        <Text style={stopNoteStyles.cancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[stopNoteStyles.saveBtn, savingNote && { opacity: 0.5 }]}
+                        onPress={() => handleSaveStopNote(selectedTemplate.id, stop.id)}
+                        disabled={savingNote}
+                      >
+                        <Text style={stopNoteStyles.saveText}>
+                          {savingNote ? "Saving..." : "Save"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <>
+                    {stop.notes && <Text style={stopNoteStyles.note}>{stop.notes}</Text>}
+                    <TouchableOpacity
+                      style={stopNoteStyles.editBtn}
+                      onPress={() => {
+                        setEditingStopId(stop.id);
+                        setStopNoteText(stop.notes || "");
+                      }}
+                    >
+                      <Text style={stopNoteStyles.editBtnText}>
+                        {stop.notes ? "Edit Note" : "+ Add Note"}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            ))}
+            <View style={{ height: 40 }} />
+          </ScrollView>
+
+          <TouchableOpacity
+            style={[tplStyles.useBtn, usingTemplate === selectedTemplate.id && { opacity: 0.5 }]}
+            onPress={() => handleUseTemplate(selectedTemplate.id)}
+            disabled={usingTemplate === selectedTemplate.id}
+            activeOpacity={0.8}
+          >
+            <Text style={tplStyles.useBtnText}>
+              {usingTemplate === selectedTemplate.id ? "Creating Route..." : "Use This Template"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -707,5 +938,225 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     marginTop: -2,
+  },
+});
+
+// ─── Template Picker Styles ──────────────────────────────
+
+const tplStyles = StyleSheet.create({
+  btn: {
+    backgroundColor: "#1E293B",
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#334155",
+    marginBottom: 12,
+  },
+  btnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#93C5FD",
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#0F172A",
+    zIndex: 90,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 16,
+  },
+  pickerTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#F8FAFC",
+  },
+  closeText: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#3B82F6",
+  },
+  pickerScroll: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  emptyState: {
+    backgroundColor: "#1E293B",
+    borderRadius: 16,
+    padding: 36,
+    alignItems: "center",
+    marginTop: 20,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 8,
+  },
+  emptyBody: {
+    fontSize: 14,
+    color: "#94A3B8",
+    textAlign: "center",
+  },
+  card: {
+    backgroundColor: "#1E293B",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+  },
+  cardName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#F8FAFC",
+    marginBottom: 6,
+  },
+  cardMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    alignItems: "center",
+  },
+  cardPlatform: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#34D399",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  cardDetail: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+  creatingText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#3B82F6",
+    marginTop: 8,
+  },
+  detailPlatform: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#93C5FD",
+    paddingHorizontal: 20,
+    marginBottom: 16,
+  },
+  useBtn: {
+    backgroundColor: "#2563EB",
+    borderRadius: 14,
+    paddingVertical: 16,
+    marginHorizontal: 20,
+    marginBottom: 24,
+    alignItems: "center",
+  },
+  useBtnText: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+});
+
+const stopNoteStyles = StyleSheet.create({
+  card: {
+    backgroundColor: "#1E293B",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+  },
+  stopHeader: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+  },
+  sequence: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#3B82F6",
+    backgroundColor: "#1E3A5F",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    textAlign: "center",
+    lineHeight: 28,
+    overflow: "hidden",
+  },
+  address: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#F8FAFC",
+  },
+  city: {
+    fontSize: 13,
+    color: "#94A3B8",
+    marginTop: 2,
+  },
+  note: {
+    fontSize: 13,
+    color: "#CBD5E1",
+    backgroundColor: "#0F172A",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+    lineHeight: 18,
+    borderLeftWidth: 3,
+    borderLeftColor: "#3B82F6",
+  },
+  editBtn: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+  },
+  editBtnText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#93C5FD",
+  },
+  editForm: {
+    marginTop: 10,
+  },
+  input: {
+    backgroundColor: "#0F172A",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#334155",
+    minHeight: 70,
+    textAlignVertical: "top",
+  },
+  editActions: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 10,
+  },
+  cancelBtn: {
+    flex: 1,
+    backgroundColor: "#0F172A",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  cancelText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#94A3B8",
+  },
+  saveBtn: {
+    flex: 1,
+    backgroundColor: "#2563EB",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  saveText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });
